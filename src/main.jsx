@@ -1,3 +1,6 @@
+import "../global.css";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./styles.css";
 // src/main.js
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -8,12 +11,10 @@ import { store, persistor } from "./redux/store";
 import App from "./routes/App";
 import "nprogress/nprogress.css";
 const basename = "/";
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <Provider store={store}>
+ReactDOM.createRoot(document.getElementById("root")).render(<Provider store={store}>
     <PersistGate loading={<div>Đang tải dữ liệu...</div>} persistor={persistor}>
       <BrowserRouter basename={basename}>
         <App />
       </BrowserRouter>
     </PersistGate>
-  </Provider>
-);  
+  </Provider>);

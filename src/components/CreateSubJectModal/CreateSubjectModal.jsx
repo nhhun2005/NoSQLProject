@@ -1,121 +1,46 @@
-import { useState } from "react";
-import "./CreateSubjectModal.css";
-import stringValidater from "../../api/stringValidater";
-import DefaultAlert from "../AlertBoxes/DefaultAlert";
-import subjectService from "../../services/subjectService";
-
-export default function CreateSubjectModal({ setShowCreateSubjectModal }) {
-  const [name, setName] = useState("");
-  const [image, setImage] = useState("");
-  const [description, setDescription] = useState("");
-  const [showAlert, setShowAlert] = useState(0);
-
-  async function handleCreateSubject() {
+import { useState, useRef } from 'react';
+import subjectService from '../../services/subjectService';
+import AccessibleDialog from '../AccessibleDialog';
+import { resolveAssetUrl } from '../../utils/apiConfig';
+export default function CreateSubjectModal({
+  setShowCreateSubjectModal
+}) {
+  const [name, setName] = useState(''),
+    [image, setImage] = useState(''),
+    [description, setDescription] = useState(''),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  async function submit(event) {
+    event.preventDefault();
+    if (pending.current) return;
+    setError('');
+    if (!name.trim()) {
+      setError('Vui lòng nhập tên môn học.');
+      return;
+    }
+    if (image.trim() && !resolveAssetUrl(image)) {
+      setError('Đường dẫn ảnh không hợp lệ.');
+      return;
+    }
+    pending.current = true;
+    setBusy(true);
     try {
-      subjectService
-        .create({
-          name: name,
-          image: image,
-          description: description,
-          availability: true,
-        })
-        .then((res) => {
-          setShowAlert(1);
-        })
-        .catch((err) => {
-          setShowAlert(2);
-        });
-    } catch {
-      setShowAlert(2);
+      await subjectService.create({
+        name: name.trim(),
+        image: image.trim(),
+        description: description.trim(),
+        availability: true
+      });
+      window.location.reload();
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Chưa tạo được môn học. Vui lòng thử lại.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   }
-
-  return (
-    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-49 ">
-      <div className="w-[50%] h-[50%] bg-white rounded-[8px] pb-24">
-        <p className="w-full py-8 text-4xl font-black text-green-700 text-center mb-12">
-          Tạo môn học mới
-        </p>
-        <div className="flex flex-row items-center w-[90%] mx-auto h-[4rem]">
-          <p className="my-2 text-2xl pr-8 w-[25%]">Tên môn học: </p>
-          <input
-            value={name}
-            onChange={(e) => {
-              setName((prev) => {
-                if (stringValidater(e.target.value, 1)) return e.target.value;
-                return prev;
-              });
-            }}
-            type="text"
-            className="flex-fill h-[3rem] rounded-[8px] text-2xl px-4"
-          ></input>
-        </div>
-        <div className="flex flex-row items-center w-[90%] mx-auto h-[4rem]">
-          <p className="my-2 text-2xl pr-8 w-[25%]">Url hình ảnh: </p>
-          <input
-            value={image}
-            onChange={(e) => {
-              setImage(e.target.value);
-            }}
-            type="text"
-            className="flex-fill h-[3rem] rounded-[8px] text-2xl px-4"
-          ></input>
-        </div>
-        <div className="flex flex-row items-center w-[90%] mx-auto h-[4rem]">
-          <p className="my-2 text-2xl pr-8 w-[25%]">Mô tả môn học: </p>
-          <input
-            value={description}
-            onChange={(e) => {
-              setDescription((prev) => {
-                if (stringValidater(e.target.value, 1)) return e.target.value;
-                return prev;
-              });
-            }}
-            type="text"
-            className="flex-fill h-[3rem] rounded-[8px] text-2xl px-4"
-          ></input>
-        </div>
-        <div className="flex flex-row justify-center  gap-12 w-[50%] items-center h-[4rem] mx-auto mt-8">
-          <div
-            className=" rounded-[8px] text-2xl text-white  shadow-black px-4 py-4 select-none cursor-pointer
-                        bg-[#31872D] transition-all duration-500 hover:scale-105 hover:bg-[#5a8d56]
-                        "
-            onClick={() => {
-              handleCreateSubject();
-            }}
-          >
-            Thêm môn học
-          </div>
-          <div
-            className=" rounded-[8px] text-2xl text-white  shadow-black px-4 py-4 select-none cursor-pointer
-                        bg-[#ff6b6b] transition-all duration-500 hover:scale-105  hover:bg-[#dd3f3f]
-                        "
-            onClick={() => {
-              setShowCreateSubjectModal(false);
-            }}
-          >
-            Hủy bỏ
-          </div>
-        </div>
-      </div>
-      {showAlert == 1 && (
-        <DefaultAlert
-          title="Tạo môn thành công"
-          information={`Đã tạo môn học ${name} thành công!`}
-          closeButton={() => {
-            window.location.reload();
-          }}
-        ></DefaultAlert>
-      )}
-      {showAlert == 2 && (
-        <DefaultAlert
-          title="Tạo môn thất bại"
-          information={`Không thể tạo môn học ${name}, vui lòng kiểm tra lại`}
-          closeButton={() => {
-            setShowAlert(0);
-          }}
-        ></DefaultAlert>
-      )}
-    </div>
-  );
+  return <AccessibleDialog label="Tạo môn học mới" onClose={() => {
+    if (!busy) setShowCreateSubjectModal(false);
+  }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]"><form noValidate className="w-1/2 bg-white p-8 rounded-xl" onSubmit={submit} aria-busy={busy}><h2>Tạo môn học mới</h2><fieldset disabled={busy}><label className="block">Tên môn học<input className="block border rounded p-2 w-full my-3" value={name} onChange={e => setName(e.target.value)} required /></label><label className="block">Đường dẫn ảnh<input className="block border rounded p-2 w-full my-3" value={image} onChange={e => setImage(e.target.value)} /></label><label className="block">Mô tả môn học<textarea className="block border rounded p-2 w-full my-3" value={description} onChange={e => setDescription(e.target.value)} /></label>{error && <p role="alert" className="text-red-800">{error}</p>}<div className="flex gap-4 mt-6"><button type="submit" className="bg-green-800 text-white p-3 rounded">{busy ? 'Đang tạo...' : 'Thêm môn học'}</button><button type="button" onClick={() => setShowCreateSubjectModal(false)}>Hủy bỏ</button></div></fieldset></form></AccessibleDialog>;
 }

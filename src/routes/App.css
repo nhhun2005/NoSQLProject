@@ -1,4 +1,3 @@
-
 html, body {
   font-family: 'K2D', sans-serif !important;
 }
@@ -36,3 +35,8 @@ body,
     font-size: 18px;
     color: #666;
 }
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #996700 !important;
+  outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; opacity: .65; }

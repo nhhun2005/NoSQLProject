@@ -1,153 +1,65 @@
-import "./CreateChapterModal.css";
-import { useEffect, useState } from "react";
-import chapterService from "../../services/chapterService";
+import { useEffect, useRef, useState } from 'react';
+import chapterService from '../../services/chapterService';
+import AccessibleDialog from '../AccessibleDialog';
 export default function CreateChapterModal({
-  setShowConfirm,
   subjectId,
   showCreateChapter,
-  setShowCreateChapter,
+  setShowCreateChapter
 }) {
-  if (!showCreateChapter) {
-    return <></>;
-  }
-
-  const [chapters, setChapters] = useState([]);
-  const [chapterName, setChapterName] = useState("");
-  const [desc, setDesc] = useState("");
-  const [expandChapter, setExpandChapter] = useState(true);
-  const [selectedChapter, setSelectedChapter] = useState(-1);
-
+  const [chapters, setChapters] = useState([]),
+    [selected, setSelected] = useState('new'),
+    [name, setName] = useState(''),
+    [description, setDescription] = useState(''),
+    [error, setError] = useState(''),
+    [loading, setLoading] = useState(false),
+    [saving, setSaving] = useState(false),
+    [retry, setRetry] = useState(0);
+  const pending = useRef(false);
   useEffect(() => {
-    chapterService
-      .getBySubject(subjectId)
-      .then((res) => {
-        setChapters(res.data);
-      })
-      .catch((err) => {
-        console.log("Gap loi khi lay chapter: ", err);
-      });
-  }, []);
-  const handleCreateChapter = () => {
-    if (
-      (selectedChapter == "new" && (chapterName == "" || desc == "")) ||
-      selectedChapter == -1
-    ) {
+    if (!showCreateChapter) return;
+    let current = true;
+    setLoading(true);
+    setError('');
+    chapterService.getBySubject(subjectId).then(res => {
+      if (current) setChapters(res.data);
+    }).catch(() => {
+      if (current) setError('Không tải được chương.');
+    }).finally(() => {
+      if (current) setLoading(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [subjectId, showCreateChapter, retry]);
+  async function submit(event) {
+    event.preventDefault();
+    if (pending.current) return;
+    setError('');
+    if (selected === 'new' && !name.trim()) {
+      setError('Vui lòng nhập tên chương.');
       return;
     }
-    if (selectedChapter == "new") {
-      chapterService
-        .create({
-          subjectId: subjectId,
-          name: chapterName,
-          description: desc,
-          availability: true,
-        })
-        .then((res) => {
-          console.log("tao thanh cong: ", res);
-          location.reload();
-        })
-        .catch((err) => {
-          console.log("error: ", err);
-        });
-    } else {
-      console.log("case");
-      chapterService
-        .updateAvailability(selectedChapter, {
-          availability: true,
-        })
-        .then((res) => {
-          location.reload();
-        })
-        .catch((err) => {
-          location.reload();
-        });
+    pending.current = true;
+    setSaving(true);
+    try {
+      if (selected === 'new') await chapterService.create({
+        subjectId,
+        name: name.trim(),
+        description: description.trim(),
+        availability: true
+      });else await chapterService.updateAvailability(selected, {
+        availability: true
+      });
+      window.location.reload();
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Chưa lưu được chương. Vui lòng thử lại.');
+    } finally {
+      pending.current = false;
+      setSaving(false);
     }
-  };
-  return (
-    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-49">
-      <div className="relative w-[50%] min-h-[50%] bg-white rounded-[8px]">
-        <div className="text-center pt-2 text-3xl font-bold">Thêm chương</div>
-        <div className="mt-4 px-4 text-2xl">Danh sách chương sẵn có :</div>
-        <div
-          className={`border-2 w-[90%] mx-auto mt-4 ${
-            expandChapter ? "min-h-[300px] mb-20" : "min-h-[50px] mb-4"
-          }`}
-        >
-          <div
-            onClick={() => {
-              setExpandChapter((prev) => {
-                if (prev == true) {
-                  setSelectedChapter("new");
-                } else {
-                  setSelectedChapter(-1);
-                }
-                return !prev;
-              });
-            }}
-            className={`text-xl px-4 py-2 ${
-              !(selectedChapter == "new") ? "hover:bg-gray-200" : "bg-gray-200"
-            } hover:cursor-pointer `}
-          >
-            -- Tạo chương mới --
-          </div>
-          <div className={`${!expandChapter ? "hidden" : ""}`}>
-            {chapters?.map((chapter, i) => {
-              if (!chapter.availability)
-                return (
-                  <div
-                    onClick={() => {
-                      setSelectedChapter(chapter._id);
-                    }}
-                    key={`chapter_${i}`}
-                    className={`text-xl px-4 py-2 ${
-                      !(selectedChapter == chapter._id)
-                        ? "hover:bg-gray-200"
-                        : "bg-gray-200"
-                    } hover:cursor-pointer`}
-                  >
-                    {chapter.name}
-                  </div>
-                );
-            })}
-          </div>
-        </div>
-        {!expandChapter && (
-          <div className="relative mb-24">
-            <p className="text-2xl px-4">Tên chương mới: </p>
-            <input
-              value={chapterName}
-              onChange={(e) => {
-                setChapterName(e.target.value);
-              }}
-              className="text-2xl px-4 py-2 w-[95%] mx-6"
-            ></input>
-            <p className="text-2xl px-4 mt-2">Mô tả chương: </p>
-            <input
-              value={desc}
-              onChange={(e) => {
-                setDesc(e.target.value);
-              }}
-              className="text-2xl px-4 py-2 w-[95%] mx-6"
-            ></input>
-          </div>
-        )}
-        <div
-          onClick={() => {
-            handleCreateChapter();
-          }}
-          className="absolute bottom-4 transition-all duration-400 right-28 bg-green-600 text-white text-[1.5rem] px-4 py-2 rounded-md hover:scale-105 hover:cursor-pointer"
-        >
-          Thêm
-        </div>
-        <div
-          onClick={() => {
-            setShowCreateChapter(false);
-          }}
-          className="absolute bottom-4 transition-all duration-400 right-4 bg-green-600 text-white text-[1.5rem] px-4 py-2 rounded-md hover:scale-105 hover:cursor-pointer"
-        >
-          Hủy
-        </div>
-      </div>
-    </div>
-  );
+  }
+  if (!showCreateChapter) return null;
+  return <AccessibleDialog label="Thêm chương" onClose={() => {
+    if (!saving) setShowCreateChapter(false);
+  }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]"><form noValidate onSubmit={submit} className="w-1/2 bg-white p-8 rounded-xl"><h2>Thêm chương</h2>{loading ? <p role="status">Đang tải chương...</p> : <><label className="block">Chương cần thêm<select className="block w-full border rounded p-2 my-3" value={selected} onChange={e => setSelected(e.target.value)} disabled={saving}><option value="new">Tạo chương mới</option>{chapters.filter(c => !c.availability).map(c => <option key={c._id} value={c._id}>{c.name} (đang ẩn)</option>)}</select></label>{selected === 'new' && <><label className="block">Tên chương<input className="block w-full border rounded p-2 my-3" value={name} onChange={e => setName(e.target.value)} required disabled={saving} /></label><label className="block">Mô tả<textarea className="block w-full border rounded p-2 my-3" value={description} onChange={e => setDescription(e.target.value)} disabled={saving} /></label></>}</>}{error && <div role="alert"><p className="text-red-800">{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Tải lại chương</button></div>}<div className="flex gap-4 mt-6"><button type="submit" disabled={saving || loading} className="bg-green-800 text-white px-6 py-2 rounded">{saving ? 'Đang lưu...' : 'Thêm'}</button><button type="button" disabled={saving} onClick={() => setShowCreateChapter(false)}>Hủy</button></div></form></AccessibleDialog>;
 }

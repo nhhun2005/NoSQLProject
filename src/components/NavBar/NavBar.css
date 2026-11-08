@@ -1,14 +1,1 @@
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme) important;
-@import "tailwindcss/utilities.css" layer(utilities) important;
-
-@layer utilities {
-
-}
-.switch-pill {
-    transition: all 0.3s ease-in-out;
-}
-
-.switch-pill:hover {
-    filter: brightness(1.05);
-}
+.quiz-nav{position:relative;z-index:99;height:64px;display:flex;justify-content:space-between;align-items:center;background:white;box-shadow:0 1px 4px #17322e55;font-weight:600;padding:0 26px;gap:24px}.quiz-nav-left{display:flex;align-items:center;gap:26px}.quiz-nav a{text-decoration:none;color:#202923}.quiz-nav-brand{display:flex;align-items:center;gap:10px;font-size:20px;letter-spacing:.5px}.quiz-nav-brand img{height:32px;width:32px}.quiz-nav-links{display:flex;align-items:center;gap:40px;font-size:20px;letter-spacing:.5px}.quiz-nav-links a[aria-current=page]{color:#276e2b}.quiz-nav a:hover{color:#245e2e}.quiz-nav-right{display:flex;align-items:center;gap:24px}.quiz-login{border:2px solid #17322e;border-radius:12px;background:#eef1ee;padding:10px 14px;white-space:nowrap}.quiz-account{position:relative}.quiz-avatar{display:flex;background:transparent;border:0;color:#2c7434;border-radius:50%;padding:2px}.quiz-dropdown{position:absolute;right:0;top:48px;background:white;border:1px solid #c0d1c4;box-shadow:0 8px 22px #17322e33;min-width:170px;border-radius:12px;padding:8px}.quiz-dropdown>a,.quiz-dropdown>button{display:block;width:100%;text-align:left;padding:10px;border:0;border-radius:6px;background:white;color:#17322e}.quiz-dropdown>a:hover,.quiz-dropdown>button:hover{background:#e9f3ec}.quiz-mode{border:0;border-radius:24px;background:#27673a;color:white;min-width:100px;padding:10px 18px}

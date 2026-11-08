@@ -1,197 +1,68 @@
-//src/pages/LoginPage/RegisterPage.jsx
-import "./LoginPage.css";
-import quizLogo from "../../quizLogo_green.svg";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import backGround from '../../backGround.svg';
-import { FaEye as EyeLogo } from "react-icons/fa";
-import { RiEyeOffFill as CloseEye } from "react-icons/ri";
-import authService from "../../services/authService";
+import { useState, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import authService from '../../services/authService';
+import { AuthLayout, AuthField } from '../../components/AuthForm';
+import { safeReturnTo, validEmail } from '../../utils/authValidation';
 export default function RegisterPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("register"); // register -> otp -> done
-  const [message, setMessage] = useState("");
-  const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
-
-  const handleRegister = async () => {
-  if (password !== confirmPassword) {
-    setMessage("Mật khẩu xác nhận không trùng khớp.");
-    return;
-  }
-
-  if (password.length < 6) {
-    setMessage("Mật khẩu phải có ít nhất 6 ký tự.");
-    return;
-  }
-
-  try {
-    setMessage("Đang gửi mã xác minh...");
-    const res = await authService.register({
-      email,
-      password,
-    });
-    setStep("otp");
-    setMessage("Mã OTP đã được gửi về email của bạn!");
-  } catch (err) {
-    console.error(err);
-    setMessage(err.response?.data?.message || "Đăng ký thất bại.");
-  }
-};
-
-
-  const handleVerifyOtp = async () => {
-    try {
-      const res = await authService.verifyOTP({
-        email,
-        otp,
-      });
-      setStep("done");
-      setMessage("✅ Xác minh thành công! Bạn có thể đăng nhập.");
-      setTimeout(() => navigate("/login"), 2000);
-    } catch (err) {
-      console.error(err);
-      setMessage(
-        err.response?.data?.message || "Mã OTP không hợp lệ hoặc đã hết hạn."
-      );
+  const [email, setEmail] = useState(''),
+    [password, setPassword] = useState(''),
+    [confirm, setConfirm] = useState(''),
+    [otp, setOtp] = useState('');
+  const [step, setStep] = useState('register'),
+    [errors, setErrors] = useState({}),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false);
+  const pending = useRef(false),
+    location = useLocation(),
+    from = safeReturnTo(location.state?.from);
+  async function submit(event) {
+    event.preventDefault();
+    if (pending.current) return;
+    const next = {};
+    setError('');
+    if (step === 'register') {
+      if (!email.trim()) next.email = 'Vui lòng nhập email.';else if (!validEmail(email)) next.email = 'Email chưa đúng định dạng.';
+      if (password.length < 6) next.password = 'Mật khẩu phải có ít nhất 6 ký tự.';
+      if (!confirm) next.confirm = 'Vui lòng xác nhận mật khẩu.';else if (confirm !== password) next.confirm = 'Mật khẩu xác nhận không trùng khớp.';
+    } else if (!/^\d{6}$/.test(otp)) next.otp = 'Vui lòng nhập đủ 6 chữ số OTP.';
+    setErrors(next);
+    if (Object.keys(next).length) {
+      document.getElementById(`register-${Object.keys(next)[0]}`)?.focus();
+      return;
     }
-  };
-
-  return (
-    <div
-      className="flex w-full h-screen justify-center items-center bg-gray-100"
-      style={{
-        backgroundImage: `url(${backGround})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      }}
-    >
-      <div
-        className="flex w-[70%] h-[70%] rounded-[20px] overflow-hidden shadow-2xl shadow-gray-400 
-                   backdrop-blur-md border border-white/30"
-        style={{ backgroundColor: "rgba(255, 255, 255, 0.15)" }}
-      >
-        <div
-          className="w-1/2 flex justify-center items-center relative 
-                   bg-white/10 border-r border-white/20"
-        >
-          <img src={quizLogo} alt="Logo" className="w-[60%] opacity-90" />
-          <div className="absolute bottom-6 text-white text-sm opacity-70 select-none">
-            © Quiz Company
-          </div>
-        </div>
-
-        <div className="w-1/2 flex flex-col justify-center items-center p-12 bg-transparent">
-          {step === "register" && (
-            <>
-              <div className="mb-8 text-center text-[32px] font-black text-white select-none drop-shadow-lg">
-                Đăng ký tài khoản
-              </div>
-
-              <input
-                type="email"
-                placeholder="Nhập email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="px-[12px] w-[90%] h-[3rem] rounded-[8px] mb-4 border border-white/50 bg-white/70"
-              />
-              <div className="flex flex-row items-center justify-center mb-4 rounded-[8px] border border-white/50 w-[90%] h-[3rem] bg-white/70">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Nhập mật khẩu"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="px-[12px] w-[45%] h-full rounded-l-[8px] border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-600"
-                />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Xác nhận mật khẩu"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="px-[12px] w-[45%] h-full rounded-r-[8px] border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-600"
-                />
-                {showPassword ? (
-                  <CloseEye
-                    onClick={() => setShowPassword(false)}
-                    className="w-[28px] cursor-pointer text-gray-600 hover:text-gray-800 transition-colors ml-2"
-                  />
-                ) : (
-                  <EyeLogo
-                    onClick={() => setShowPassword(true)}
-                    className="w-[28px] cursor-pointer text-gray-600 hover:text-gray-800 transition-colors ml-2"
-                  />
-                )}
-              </div>
-              <div className="w-[90%] text-left mb-4 text-sm text-white/80">
-                Bạn đã có tài khoản?{" "}
-                <span
-                  className="text-[#9DE3A4] font-semibold cursor-pointer hover:underline"
-                  onClick={() => navigate("/login")}
-                >
-                  Đăng nhập
-                </span>
-              </div>
-              <div
-                onClick={handleRegister}
-                className="w-[70%] h-[3rem] flex justify-center items-center 
-                bg-[#41563F] text-white font-semibold rounded-[8px] cursor-pointer 
-                hover:bg-[#31872D] transition-all duration-500 select-none drop-shadow-md transform 
-                 ease-in-out hover:scale-[1.05]"
-              >
-                Gửi mã xác minh
-              </div>
-            </>
-          )}
-
-          {step === "otp" && (
-            <>
-              <div className="mb-8 text-center text-[28px] font-black text-white select-none drop-shadow-lg">
-                Nhập mã xác minh
-              </div>
-
-              <div className="flex justify-center mb-6">
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, "").slice(0, 6); // chỉ cho nhập 0–9 và tối đa 6 ký tự
-                    setOtp(value);
-                  }}
-                  maxLength="6"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Nhập mã OTP"
-                  className="w-[12rem] h-[3.2rem] text-center text-2xl rounded-[8px] border border-white/50 bg-white/70 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#31872D] placeholder-gray-500"
-                />
-              </div>
-
-              <div
-                onClick={handleVerifyOtp}
-                className="w-[70%] h-[3rem] flex justify-center items-center 
-                    bg-[#41563F] text-white font-semibold rounded-[8px] cursor-pointer 
-                    hover:bg-[#31872D] transition-all duration-500 select-none drop-shadow-md transform 
-                    ease-in-out hover:scale-[1.05]"
-              >
-                Xác nhận mã
-              </div>
-            </>
-          )}
-
-          {step === "done" && (
-            <div className="text-white text-center text-lg font-semibold">
-              Tài khoản đã xác minh! Đang chuyển hướng đến trang đăng nhập...
-            </div>
-          )}
-
-          {message && (
-            <div className="text-white text-sm mt-6 opacity-90">{message}</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+    pending.current = true;
+    setBusy(true);
+    try {
+      if (step === 'register') {
+        await authService.register({
+          email: email.trim().toLowerCase(),
+          password
+        });
+        setStep('otp');
+      } else {
+        await authService.verifyOTP({
+          email: email.trim().toLowerCase(),
+          otp
+        });
+        setStep('done');
+        setPassword('');
+        setConfirm('');
+        setOtp('');
+      }
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Không thể kết nối. Vui lòng thử lại.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+  return <AuthLayout title="Đăng ký tài khoản">{step === 'done' ? <div className="auth-success" role="status"><p>Tài khoản đã được xác minh.</p><Link to="/login" state={{
+        from
+      }}>Đăng nhập để tiếp tục</Link></div> : <form noValidate onSubmit={submit} aria-busy={busy}>{step === 'register' ? <><AuthField id="register-email" label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" required error={errors.email} /><AuthField id="register-password" label="Mật khẩu (ít nhất 6 ký tự)" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" minLength={6} required error={errors.password} /><AuthField id="register-confirm" label="Xác nhận mật khẩu" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" required error={errors.confirm} /></> : <><p>Mã xác minh đã được gửi đến <strong>{email.trim()}</strong>. Kiểm tra cả thư mục spam.</p><AuthField id="register-otp" label="Mã OTP" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required error={errors.otp} /><button type="button" className="auth-link" disabled={busy} onClick={() => {
+          setStep('register');
+          setErrors({});
+          setError('');
+        }}>Sửa email / gửi lại mã</button></>}{error && <p className="auth-error" role="alert">{error}</p>}<button type="submit" disabled={busy}>{busy ? 'Đang xử lý...' : step === 'register' ? 'Gửi mã xác minh' : 'Xác nhận mã OTP'}</button></form>}<p className="auth-foot">Đã có tài khoản? <Link to="/login" state={{
+        from
+      }}>Đăng nhập</Link></p></AuthLayout>;
 }

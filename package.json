@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist",
-    "forcedeploy": "rm -rf dist && npm run build && npm run deploy"
+    "forcedeploy": "rm -rf dist && npm run build && npm run deploy",
+    "test": "node --test tests/*.test.js backend/tests/*.test.js",
+    "test:ui:api": "node backend/tests/ui-fixture.js",
+    "test:ui:dev": "vite --config tests/ui-vite.config.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",

@@ -1,18 +1,10 @@
 import express from "express";
-import {
-  getUserSubmissions,
-  addSubmission,
-  getLatestSubmission,
-  getAllSubmissionFromSubject,
-  getBestSubmission,
-} from "../controllers/submissionController.js";
-
+import { getUserSubmissions, addSubmission, getLatestSubmission, getAllSubmissionFromSubject, getBestSubmission } from "../controllers/submissionController.js";
+import { verifyToken } from "../middlewares/verifyToken.js";
 const router = express.Router();
-
-router.get("/:userId", getUserSubmissions);
-router.get("/latest/:quizId/:userId", getLatestSubmission);
-router.get("/subject/:userId/:subjectId", getAllSubmissionFromSubject);
-router.get("/best/:quizId/:userId", getBestSubmission);
-router.post("/", addSubmission);
-
+router.get("/:userId", verifyToken, getUserSubmissions);
+router.get("/latest/:quizId/:userId", verifyToken, getLatestSubmission);
+router.get("/subject/:userId/:subjectId", verifyToken, getAllSubmissionFromSubject);
+router.get("/best/:quizId/:userId", verifyToken, getBestSubmission);
+router.post("/", verifyToken, addSubmission);
 export default router;

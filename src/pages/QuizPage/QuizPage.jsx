@@ -1,330 +1,231 @@
-import { useState, useEffect } from "react"; // React hook: state và side-effects
-import { useParams, useLocation, useNavigate } from "react-router-dom"; // Router hook
-import { useSelector } from "react-redux"; // Lấy dữ liệu từ Redux
-import quizService from "../../services/quizService"; // API lấy quiz
-import submissionService from "../../services/submissionService"; // API nộp bài
-import QuestionDrawer from "../../components/QuestionDrawer/QuestionDrawer"; // Drawer bên phải show câu hỏi
-import { FaChevronLeft, FaChevronRight } from "react-icons/fa"; // Icon điều hướng
-import { Button, Container } from "react-bootstrap"; // React-Bootstrap
-
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import quizService from '../../services/quizService';
+import submissionService from '../../services/submissionService';
+import QuestionDrawer from '../../components/QuestionDrawer/QuestionDrawer';
+import { resolveAssetUrl } from '../../utils/apiConfig';
+const defaults = {
+  shuffleQuestions: true,
+  showAnswers: true,
+  shuffleOptions: false,
+  rotationalPractice: true,
+  timeLimit: false,
+  scoreMode: false
+};
+function shuffled(items) {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 export default function QuizPage() {
-  const { quizId } = useParams(); // Lấy quizId từ URL
-  const location = useLocation(); // Lấy state truyền từ trang trước
-  const navigate = useNavigate(); // Điều hướng
-  const account = useSelector((state) => state.user.account); // Lấy user hiện tại
-  const userId = account?.id;
-
-  // Nếu chưa đăng nhập
-  if (!userId)
-    return (
-      <div className="text-center text-red-500 mt-10">
-        Vui lòng đăng nhập để làm bài.
-      </div>
-    );
-
-  // Quiz info từ location state hoặc default
-  const quizInfo = location.state?.quiz || {
-    name: "Kiểm tra nhanh Giới thiệu ngôn ngữ lập trình",
-    timeLimit: 5, // phút
-  };
-  const subjectId = location.state.subjectId;
-  const options = location.state?.options || {
-    shuffleQuestions: true, // Trộn câu hỏi
-    showAnswers: true, // Hiển thị đáp án ngay
-    shuffleOptions: false, // Trộn đáp án
-    rotationalPractice: true, // Cho phép luyện lại câu sai
-    timeLimit: true, // Giới hạn thời gian
-    scoreMode: false, // Có lưu điểm không
-  };
-
-  // State chính
-  const [questions, setQuestions] = useState([]); // Danh sách câu hỏi
-  const [answers, setAnswers] = useState({}); // Lưu đáp án user
-  const [currentIndex, setCurrentIndex] = useState(0); // Câu hiện tại
-  const [flagged, setFlagged] = useState([]); // Câu đánh dấu
-  const [submitted, setSubmitted] = useState(false); // Bài đã nộp chưa
-  const [remainingTime, setRemainingTime] = useState(
-    options.timeLimit ? quizInfo.timeLimit * 60 : null // thời gian còn lại tính bằng giây
-  );
-  const [startTime, setStartTime] = useState(Date.now()); // Thời gian bắt đầu quiz
-
-  // Fetch câu hỏi khi load trang
-  useEffect(() => {
-    if (!quizId) return;
-    const fetchQuestions = async () => {
-      try {
-        const res = await quizService.getById(quizId); // Lấy quiz từ server
-        let fetched = res.data.questions || [];
-        if (options.shuffleQuestions)
-          fetched = fetched.sort(() => Math.random() - 0.5); // Trộn câu hỏi
-        if (options.shuffleOptions)
-          fetched = fetched.map((q) => ({
-            ...q,
-            options: [...q.options].sort(() => Math.random() - 0.5), // Trộn đáp án
-          }));
-        setQuestions(fetched);
-        setStartTime(Date.now()); // Lưu thời gian bắt đầu
-      } catch {
-        console.log("Không lấy được dữ liệu");
+  const {
+    quizId
+  } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const options = useMemo(() => ({
+    ...defaults,
+    ...location.state?.options
+  }), [location.state?.options]);
+  const [quiz, setQuiz] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [flagged, setFlagged] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState('loading');
+  const [error, setError] = useState('');
+  const [retryLoad, setRetryLoad] = useState(0);
+  const [mode, setMode] = useState(Boolean(options.scoreMode));
+  const [activeOptions, setActiveOptions] = useState(options);
+  const [remaining, setRemaining] = useState(null);
+  const [result, setResult] = useState(null);
+  const attemptRef = useRef(null);
+  const deadlineRef = useRef(null);
+  const sendingRef = useRef(false);
+  const startedRef = useRef(null);
+  const mountedRef = useRef(false);
+  const generationRef = useRef(0);
+  const autoSubmitted = useRef(false);
+  const initialize = useCallback(async (scoreMode, selectedOptions = options) => {
+    const generation = generationRef.current;
+    autoSubmitted.current = false;
+    setPhase('starting');
+    setError('');
+    try {
+      const response = await quizService.startAttempt(quizId, scoreMode);
+      if (!mountedRef.current || generationRef.current !== generation) return;
+      const data = response.data;
+      const actualOptions = scoreMode ? {
+        ...selectedOptions,
+        scoreMode: true,
+        showAnswers: false,
+        rotationalPractice: false,
+        timeLimit: true
+      } : {
+        ...selectedOptions,
+        scoreMode: false
+      };
+      let list = data.quiz?.questions || [];
+      if (!list.length) throw new Error('Bộ đề chưa có câu hỏi.');
+      list = actualOptions.shuffleQuestions ? shuffled(list) : list;
+      if (actualOptions.shuffleOptions) list = list.map(q => ({
+        ...q,
+        options: shuffled(q.options)
+      }));
+      setQuiz(data.quiz);
+      setQuestions(list);
+      setAnswers({});
+      setFlagged([]);
+      setIndex(0);
+      setResult(null);
+      setActiveOptions(actualOptions);
+      attemptRef.current = data.attemptId;
+      const minutes = Number(data.quiz.timeLimit);
+      // The server enforces its own deadline. The client timer is display/auto-submit only.
+      deadlineRef.current = actualOptions.timeLimit && minutes > 0 ? scoreMode && data.deadlineAt ? new Date(data.deadlineAt).getTime() : Date.now() + minutes * 60000 : null;
+      setRemaining(deadlineRef.current ? Math.ceil((deadlineRef.current - Date.now()) / 1000) : null);
+      setPhase('running');
+    } catch (failure) {
+      if (mountedRef.current && generationRef.current === generation) {
+        setError(failure.response?.data?.message || failure.message || 'Không thể bắt đầu bài.');
+        setPhase('ready');
       }
-    };
-    fetchQuestions();
-  }, [quizId]);
-
-  // Countdown nếu có giới hạn thời gian
+    }
+  }, [options, quizId]);
   useEffect(() => {
-    if (!options.timeLimit || submitted) return;
-    if (remainingTime <= 0) {
-      handleSubmit(); // Auto submit khi hết giờ
-      alert("⏰ Hết giờ làm bài!");
+    mountedRef.current = true;
+    generationRef.current++;
+    let current = true;
+    setPhase('loading');
+    setError('');
+    setQuiz(null);
+    setQuestions([]);
+    quizService.getById(quizId).then(async response => {
+      if (!current) return;
+      setQuiz(response.data);
+      setPhase('ready');
+      if (location.state?.options && startedRef.current !== location.key) {
+        startedRef.current = location.key;
+        await initialize(Boolean(options.scoreMode));
+      }
+    }).catch(failure => {
+      if (current) {
+        setError(failure.response?.data?.message || 'Không tải được bộ đề. Kiểm tra kết nối rồi thử lại.');
+        setPhase('error');
+      }
+    });
+    return () => {
+      current = false;
+      mountedRef.current = false;
+    };
+  }, [quizId, retryLoad, location.key, location.state?.options, options.scoreMode, initialize]);
+  const submit = useCallback(async () => {
+    if (sendingRef.current || phase !== 'running' || !questions.length) return;
+    sendingRef.current = true;
+    setPhase('submitting');
+    setError('');
+    try {
+      if (activeOptions.scoreMode) {
+        const response = await submissionService.createOrUpdate({
+          quizId,
+          attemptId: attemptRef.current,
+          answers: Object.entries(answers).map(([questionId, selectedOption]) => ({
+            questionId,
+            selectedOption
+          }))
+        });
+        if (!mountedRef.current) return;
+        // Score and correctness are computed exclusively on the server.
+        setResult(response.data.submission);
+        setPhase('submitted');
+      } else {
+        const correct = questions.filter(q => answers[q._id] === q.answer).length;
+        setResult({
+          score: Math.round(correct / questions.length * 100),
+          correct,
+          totalQuestions: questions.length
+        });
+        setPhase('submitted');
+      }
+    } catch (failure) {
+      if (mountedRef.current) {
+        setError(failure.response?.data?.message || 'Chưa lưu được bài. Bạn có thể bấm Nộp bài để thử lại.');
+        setPhase([404, 410].includes(failure.response?.status) ? 'ready' : 'running');
+      }
+    } finally {
+      sendingRef.current = false;
+    }
+  }, [phase, questions, activeOptions.scoreMode, quizId, answers]);
+  useEffect(() => {
+    if (phase !== 'running' || !deadlineRef.current) return;
+    const tick = () => setRemaining(Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  }, [phase]);
+  useEffect(() => {
+    if (phase === 'running' && remaining === 0 && !autoSubmitted.current) {
+      autoSubmitted.current = true;
+      submit();
+    }
+  }, [phase, remaining, submit]);
+  function retryIncorrect() {
+    const list = questions.filter(q => answers[q._id] !== q.answer);
+    if (!list.length) {
+      navigate(back);
       return;
     }
-    const timer = setInterval(() => setRemainingTime((prev) => prev - 1), 1000); // Giảm 1 giây
-    return () => clearInterval(timer);
-  }, [submitted, remainingTime]);
-
-  // Chọn đáp án
-  const handleAnswerSelect = (questionId, option) => {
-    if (submitted || (options.showAnswers && answers[questionId])) return;
-    setAnswers((prev) => ({ ...prev, [questionId]: option }));
-  };
-
-  // Đánh dấu / bỏ đánh dấu câu hỏi
-  const handleToggleFlag = (questionId) => {
-    setFlagged((prev) =>
-      prev.includes(questionId)
-        ? prev.filter((f) => f !== questionId)
-        : [...prev, questionId]
-    );
-  };
-
-  // Submit bài
-  const handleSubmit = async () => {
-    let correct = 0;
-    questions.forEach((q) => {
-      if (answers[q._id] === q.answer) correct++;
-    });
-    setSubmitted(true);
-    const score = Math.round((correct / questions.length) * 100);
-    const totalQuestions = questions.length;
-    const timeTaken = Math.floor((Date.now() - startTime) / 1000); // tính giây
-
-    if (options.scoreMode) {
-      try {
-        const formattedAnswers = questions
-          .filter((q) => answers[q._id])
-          .map((q) => ({
-            questionId: q._id,
-            selectedOption: answers[q._id],
-            isCorrect: answers[q._id] === q.answer,
-          }));
-
-        await submissionService.createOrUpdate({
-          userId,
-          quizId,
-          answers: formattedAnswers,
-          score,
-          totalQuestions,
-          timeSpent: timeTaken,
-        });
-
-        alert(
-          `🎯 Bạn đạt ${score}% (${correct}/${totalQuestions} câu đúng)\n⏱️ Thời gian: ${Math.floor(
-            timeTaken / 60
-          )} phút ${timeTaken % 60} giây`
-        );
-        navigate(`/quizzes/review/${quizId}`, {
-          state: { mode: "latest", subjectId },
-        });
-      } catch (err) {
-        console.error(err);
-        alert("❌ Lỗi khi nộp bài. Vui lòng thử lại sau!");
-      }
-    } else {
-      alert(`🎉 Bạn làm đúng ${correct}/${questions.length} câu!`);
-    }
-  };
-
-  // Luyện lại câu sai (rotational practice)
-  const handleRetry = () => {
-    const incorrect = questions.filter((q) => answers[q._id] !== q.answer);
-    if (incorrect.length === 0) {
-      alert("🎉 Bạn đã làm đúng tất cả câu hỏi!");
-      navigate(-1); // quay lại trang trước
-    }
-    setQuestions(incorrect);
-    setSubmitted(false);
+    setQuestions(list);
     setAnswers({});
     setFlagged([]);
-    setCurrentIndex(0);
-    setRemainingTime(options.timeLimit ? quizInfo.timeLimit * 60 : null);
-    setStartTime(Date.now());
-  };
-
-  // Nếu câu hỏi chưa load
-  if (questions.length === 0)
-    return (
-      <div className="text-center mt-10 text-gray-600">Đang tải câu hỏi...</div>
-    );
-
-  const q = questions[currentIndex]; // Câu hiện tại
-  const answeredQuestions = Object.keys(answers)
-    .filter((key) => answers[key])
-    .map((key) => questions.findIndex((qq) => qq._id === key) + 1); // Số thứ tự câu đã trả lời
-
-  // Format thời gian từ giây sang MM:SS
-  const formatTime = (secs) => {
-    if (!secs && secs !== 0) return "--:--";
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
-
-  return (
-    <Container
-      fluid
-      className="h-screen flex flex-col overflow-hidden bg-gray-50"
-    >
-      {/* --- MAIN QUESTION AREA --- */}
-      <div
-        className="flex flex-col justify-start w-full max-w-3xl mx-auto mt-[8vh] overflow-y-auto pb-[40vh] scroll-smooth"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        <style jsx>{`
-          div::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
-
-        {/* --- NAV CONTROLS --- */}
-        <div className="flex justify-between items-center mb-5 px-2 w-full">
-          <Button
-            variant="success"
-            disabled={currentIndex === 0} // disable nếu câu đầu
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-400"
-            onClick={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
-          >
-            <FaChevronLeft /> Câu trước
-          </Button>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="success"
-              disabled={currentIndex === questions.length - 1} // disable nếu câu cuối
-              className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-400"
-              onClick={() =>
-                setCurrentIndex((prev) =>
-                  Math.min(prev + 1, questions.length - 1)
-                )
-              }
-            >
-              Câu sau <FaChevronRight />
-            </Button>
-            <button
-              className={`text-3xl transition-transform focus:outline-none focus:ring-0 active:scale-105 ${
-                flagged.includes(q._id)
-                  ? "text-yellow-400 scale-110"
-                  : "text-gray-400"
-              }`}
-              style={{
-                border: "none",
-                outline: "none",
-                boxShadow: "none",
-                background: "transparent",
-              }}
-              onClick={() => handleToggleFlag(q._id)}
-            >
-              🚩
-            </button>
-          </div>
-        </div>
-
-        {/* --- QUESTION HEADER --- */}
-        <div className="text-center mb-4">
-          <p className="text-2xl font-bold text-gray-800">
-            {currentIndex + 1}. {q.question}
-          </p>
-        </div>
-
-        {/* Nếu câu có hình */}
-        {q.image && (
-          <div className="flex justify-center my-3">
-            <img
-              src={
-                q.image.startsWith("http")
-                  ? q.image
-                  : `http://localhost:5000/${q.image}`
-              }
-              alt="Question"
-              className="max-w-full max-h-[400px] rounded-xl shadow-md object-contain"
-            />
-          </div>
-        )}
-
-        {/* --- OPTIONS --- */}
-        <div className="flex flex-col gap-4 mt-6">
-          {q.options.map((opt, i) => {
-            const isSelected = answers[q._id] === opt;
-            const hasAnswered = Boolean(answers[q._id]);
-            let base =
-              "flex items-center gap-3 p-4 rounded-xl cursor-pointer transition";
-            let style = "bg-gray-100 hover:bg-gray-300";
-
-            // Highlight đáp án đúng/sai nếu showAnswers
-            if (options.showAnswers && hasAnswered) {
-              if (opt === q.answer)
-                style = "bg-green-100 border border-green-600";
-              else if (isSelected && opt !== q.answer)
-                style = "bg-red-100 border border-red-600";
-            } else if (isSelected) style = "bg-gray-300";
-
-            return (
-              <label
-                key={i}
-                className={`${base} ${style}`}
-                onClick={() => handleAnswerSelect(q._id, opt)}
-              >
-                <input
-                  type="radio"
-                  name={q._id}
-                  checked={isSelected}
-                  onChange={() => handleAnswerSelect(q._id, opt)}
-                  className="w-5 h-5 accent-green-700"
-                />
-                <span className="text-lg text-gray-800">{opt}</span>
-              </label>
-            );
-          })}
-        </div>
-
-        {/* --- Show đáp án nếu đã submit hoặc showAnswers */}
-        {(submitted || (options.showAnswers && answers[q._id])) && (
-          <div className="mt-8 p-4 bg-gray-100 rounded-xl">
-            <p className="text-green-700 font-semibold">
-              ✅ <strong>Đáp án đúng:</strong> {q.answer}
-            </p>
-            <p className="text-gray-600 mt-2">{q.explain}</p>
-          </div>
-        )}
-      </div>
-
-      {/* --- DRAWER BÊN DƯỚI--- */}
-      <QuestionDrawer
-        totalQuestions={questions.length}
-        answered={answeredQuestions}
-        flagged={flagged.map(
-          (id) => questions.findIndex((q) => q._id === id) + 1
-        )}
-        currentQuestion={currentIndex + 1}
-        remainingTime={
-          options.timeLimit ? formatTime(remainingTime) : "Không giới hạn"
-        }
-        rotationalPractice={options.rotationalPractice}
-        onSelectQuestion={(num) => setCurrentIndex(num - 1)}
-        onSubmit={handleSubmit}
-        onRetry={handleRetry}
-        showRetryButton={options.rotationalPractice}
-      />
-    </Container>
-  );
+    setIndex(0);
+    setResult(null);
+    setError('');
+    deadlineRef.current = null;
+    setRemaining(null);
+    setPhase('running');
+    autoSubmitted.current = false;
+  }
+  const subjectId = typeof quiz?.subjectId === 'object' ? quiz?.subjectId?._id : quiz?.subjectId;
+  const back = subjectId ? `/subject/view/${subjectId}` : '/subject/view';
+  if (phase === 'loading' || phase === 'starting') return <p className="p-8" role="status">{phase === 'starting' ? 'Đang chuẩn bị bài...' : 'Đang tải bộ đề...'}</p>;
+  if (phase === 'error') return <section className="p-8" role="alert"><p>{error}</p><button type="button" onClick={() => setRetryLoad(v => v + 1)}>Thử lại</button> <Link to="/subject/view">Về môn học</Link></section>;
+  if (phase === 'ready') return <section className="max-w-3xl mx-auto p-8"><Link to={back}>← Về môn học</Link><h1 className="mt-6">{quiz?.name || 'Bộ đề'}</h1>{!quiz?.questions?.length ? <p>Bộ đề chưa có câu hỏi để làm.</p> : <><p>Chọn luyện tập để xem lời giải, hoặc làm bài có tính điểm để lưu kết quả.</p><label className="block my-4"><input type="checkbox" checked={mode} onChange={e => setMode(e.target.checked)} /> Làm bài có tính điểm ({Number(quiz?.timeLimit) || 0} phút)</label><button type="button" onClick={() => {
+        autoSubmitted.current = false;
+        initialize(mode);
+      }} className="bg-green-800 text-white rounded-lg px-6 py-3">Bắt đầu làm bài</button></>}{error && <p role="alert" className="text-red-800 mt-4">{error}</p>}</section>;
+  const question = questions[index];
+  if (!question) return <section className="p-8"><p>Không có câu hỏi để hiển thị.</p><Link to={back}>Về môn học</Link></section>;
+  const locked = phase !== 'running';
+  return <div className="h-full bg-gray-50 overflow-y-auto">
+    <section className="w-full max-w-3xl mx-auto p-4 pt-8 pb-[40vh]">
+      <Link to={back}>← Về môn học</Link><h1 className="text-2xl my-4">{quiz.name}</h1>
+      {error && <div role="alert" className="p-4 border border-red-600 bg-red-50 text-red-900 mb-4">{error}</div>}
+      {phase === 'submitting' && <p role="status">Đang nộp bài...</p>}
+      {phase === 'submitted' && <div role="status" className="p-4 bg-green-100 text-green-950 mb-6"><p>{activeOptions.scoreMode ? 'Đã lưu bài. Điểm do hệ thống chấm' : 'Kết quả luyện tập (không lưu điểm)'}: <strong>{result.score}%</strong></p>{activeOptions.scoreMode && <Link to={`/quizzes/review/${quizId}`} state={{
+          subjectId,
+          mode: 'latest'
+        }}>Xem lại bài và lời giải →</Link>}</div>}
+      <div className="flex justify-between items-center gap-3 mb-5"><button type="button" disabled={index === 0} onClick={() => setIndex(v => v - 1)}>← Câu trước</button><span>Câu {index + 1}/{questions.length}</span><button type="button" disabled={index === questions.length - 1} onClick={() => setIndex(v => v + 1)}>Câu sau →</button><button type="button" aria-label={flagged.includes(question._id) ? 'Bỏ đánh dấu câu hỏi' : 'Đánh dấu câu hỏi'} aria-pressed={flagged.includes(question._id)} onClick={() => setFlagged(v => v.includes(question._id) ? v.filter(id => id !== question._id) : [...v, question._id])}>🚩</button></div>
+      <fieldset disabled={locked}><legend className="text-2xl font-bold mb-4">{index + 1}. {question.question}</legend>
+      {question.image && <img src={resolveAssetUrl(question.image)} alt={`Hình minh họa câu ${index + 1}`} className="max-w-full max-h-[400px] mx-auto mb-6 object-contain" onError={e => {
+          e.currentTarget.alt = 'Không tải được hình minh họa. Vui lòng kiểm tra đường dẫn ảnh.';
+        }} />}
+      <div className="flex flex-col gap-4">{question.options.map((option, i) => {
+            const selected = answers[question._id] === option;
+            const reveal = !activeOptions.scoreMode && (phase === 'submitted' || activeOptions.showAnswers && answers[question._id]);
+            const correct = reveal && option === question.answer;
+            const wrong = reveal && selected && !correct;
+            return <label key={`${question._id}-${i}`} className={`flex gap-3 p-4 border rounded-xl ${correct ? 'bg-green-100 border-green-700' : wrong ? 'bg-red-100 border-red-700' : selected ? 'bg-gray-200 border-gray-600' : 'bg-white border-gray-300'}`}><input type="radio" name={question._id} checked={selected} value={option} disabled={locked || Boolean(!activeOptions.scoreMode && activeOptions.showAnswers && answers[question._id])} onChange={() => setAnswers(v => ({
+                ...v,
+                [question._id]: option
+              }))} /><span>{option}{correct && ' — Đáp án đúng'}{wrong && ' — Chưa đúng'}</span></label>;
+          })}</div></fieldset>
+      {!activeOptions.scoreMode && (phase === 'submitted' || activeOptions.showAnswers && answers[question._id]) && <div className="mt-6 p-4 rounded-xl bg-green-50"><p><strong>Đáp án đúng:</strong> {question.answer}</p><p>{question.explain || 'Câu hỏi chưa có phần giải thích.'}</p></div>}
+    </section>
+    <QuestionDrawer totalQuestions={questions.length} answered={questions.flatMap((q, i) => answers[q._id] ? [i + 1] : [])} flagged={questions.flatMap((q, i) => flagged.includes(q._id) ? [i + 1] : [])} currentQuestion={index + 1} onSelectQuestion={num => setIndex(num - 1)} remainingTime={remaining === null ? 'Không giới hạn' : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`} rotationalPractice={false} onSubmit={submit} submitDisabled={locked} onRetry={retryIncorrect} showRetryButton={!activeOptions.scoreMode && phase === 'submitted' && activeOptions.rotationalPractice} />
+  </div>;
 }

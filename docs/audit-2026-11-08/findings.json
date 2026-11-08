@@ -1,0 +1,397 @@
+{
+  "meta": {
+    "date": "08/11/2026",
+    "scope": "Mã nguồn workspace và app local http://localhost:5000; API đọc tại localhost:3000. Không đánh giá bản production.",
+    "limits": "Chưa có phiên đăng nhập; API local subjects/quizzes/questions đều trả mảng rỗng. Không tạo tài khoản, không gửi OTP, không nộp/sửa/xóa dữ liệu. Các màn hình học, thống kê, đóng góp và quản trị mới rà mã nguồn; chưa kiểm thử end-to-end. Không thay đổi app hoặc DB.",
+    "checks": "UI desktop 1280×720: About, Login, Register, Forgot Password, chuyển Môn học khi chưa đăng nhập. Mobile 390×844: Login, menu, 404. Login trống và Register trống đã thử. GET local subjects/quizzes/questions=200 (0 mục), auth/me và users không token=401. Build thành công; lint 83 errors, 9 warnings.",
+    "notes": "Đã xác minh User pre-save hook băm mật khẩu; không ghi nhận lỗi lưu mật khẩu dạng thô. Chưa kiểm tra rate limit tại hạ tầng, tải đồng thời, cấu hình production hoặc tính đầy đủ dữ liệu thật. P0: bảo mật nghiêm trọng; P1: nên sửa sớm; P2: cải thiện/hoàn thiện. Tick chỉ ghi lựa chọn, không thực thi sửa đổi. Mọi thay đổi DB cần đề xuất cụ thể và phê duyệt riêng."
+  },
+  "findings": [
+    {
+      "id": "UI01",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Đã thấy trên UI",
+      "title": "Menu bị cắt trên điện thoại",
+      "evidence": "Viewport 390×844: chỉ thấy logo, Trang chủ và Môn học; các mục bên phải nằm ngoài màn hình.",
+      "fix": "Thêm menu thu gọn; cho logo và thao tác tài khoản co giãn theo breakpoint.",
+      "accept": "Ở 360/390/768px truy cập được mọi mục, không cần cuộn ngang.",
+      "sources": [
+        "src/components/NavBar/NavBar.jsx:62"
+      ]
+    },
+    {
+      "id": "UI02",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Đã thấy trên UI",
+      "title": "Form tài khoản gần như không dùng được trên mobile",
+      "evidence": "Trang login ở 390px vẫn chia hai cột; input chỉ còn một mẩu nhỏ, nội dung và liên kết xuống từng từ. Register/Forgot dùng chung cấu trúc hai cột nhưng chưa tái hiện riêng trên mobile.",
+      "fix": "Dùng một cột trên mobile, ẩn hoặc thu gọn mảng logo; chiều cao theo nội dung.",
+      "accept": "Login/Register/Forgot ở 360/390px có input đầy đủ, nút dễ chạm và không cắt nội dung.",
+      "sources": [
+        "src/pages/LoginPage/LoginPage.jsx:68",
+        "src/pages/LoginPage/RegisterPage.jsx:74",
+        "src/pages/LoginPage/ForgotPassPage.jsx:87"
+      ]
+    },
+    {
+      "id": "UI03",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Đã thấy trên UI",
+      "title": "Hai ô mật khẩu đăng ký quá chật",
+      "evidence": "Ở 1280×720, mật khẩu và xác nhận đặt cùng hàng; placeholder xác nhận bị cắt.",
+      "fix": "Tách thành hai hàng có nhãn, thống nhất vị trí nút hiện mật khẩu.",
+      "accept": "Cả hai ô có nhãn rõ, đọc được giá trị và lỗi riêng ở desktop/mobile.",
+      "sources": [
+        "src/pages/LoginPage/RegisterPage.jsx:13"
+      ]
+    },
+    {
+      "id": "UI04",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Đã thấy trên UI",
+      "title": "Trang 404 tràn nội dung khỏi thẻ",
+      "evidence": "Ở 390×844, thẻ chỉ rộng 50%; đoạn thông báo tràn xuống ngoài nền thẻ và nút quay về nằm xa bên dưới.",
+      "fix": "Dùng max-width với padding theo breakpoint; bỏ chiều cao cố định.",
+      "accept": "Thông báo và nút nằm trong thẻ ở 360px; nút không bị che.",
+      "sources": [
+        "src/pages/NotFoundPage/NotFoundPage.jsx:8"
+      ]
+    },
+    {
+      "id": "UI05",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Nút và menu thiếu hỗ trợ bàn phím, input thiếu nhãn",
+      "evidence": "Menu dùng p/div có onClick; nút đăng nhập là div; trường chỉ có placeholder. Cây accessibility không nhận các thao tác này là button/link.",
+      "fix": "Dùng button/link/form, label gắn với input, tên truy cập cho icon và trạng thái focus.",
+      "accept": "Tab tới được menu/nút/mắt mật khẩu; Enter gửi form, trình đọc màn hình đọc đúng nhãn.",
+      "sources": [
+        "src/components/NavBar/NavBar.jsx:63",
+        "src/pages/LoginPage/LoginPage.jsx:128"
+      ]
+    },
+    {
+      "id": "UI06",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Đã thấy trên UI",
+      "title": "Thông báo form không chỉ đúng trường lỗi",
+      "evidence": "Bấm login trống trả lỗi chung; bấm đăng ký trống chỉ báo mật khẩu ít nhất 6 ký tự. Login bỏ qua thông báo cụ thể từ API.",
+      "fix": "Kiểm tra trường bắt buộc/email trước gửi; hiển thị lỗi sát trường, giữ thông báo nghiệp vụ từ server.",
+      "accept": "Trống/sai email/sai mật khẩu có lỗi rõ; không gửi yêu cầu khi trường bắt buộc còn trống.",
+      "sources": [
+        "src/pages/LoginPage/LoginPage.jsx:29",
+        "src/pages/LoginPage/RegisterPage.jsx:26"
+      ]
+    },
+    {
+      "id": "UI07",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Quan sát cần đo thêm",
+      "title": "Chữ phụ và lỗi khó đọc trên nền kính",
+      "evidence": "Quan sát desktop: liên kết xanh nhạt trên nền xanh và chữ nhỏ trong form có độ nổi bật thấp; chưa đo tỷ lệ tương phản.",
+      "fix": "Đo tương phản, tăng nền đặc hoặc màu chữ cho liên kết/lỗi, giữ focus rõ.",
+      "accept": "Đạt tương phản mục tiêu 4.5:1 cho chữ thường; lỗi không chỉ phân biệt bằng màu.",
+      "sources": [
+        "src/pages/LoginPage/LoginPage.jsx:122"
+      ]
+    },
+    {
+      "id": "UI08",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Đã thấy trên UI",
+      "title": "Trang chủ chứa thông báo đã quá thời điểm và lỗi chữ",
+      "evidence": "Ngày rà 08/11/2026, trang vẫn hẹn giao diện mới tháng 9/2026. Có các chữ bân đầu, nên tảng, theo dỏi; thương hiệu Project-Quizzes/Quiz Company chưa thống nhất.",
+      "fix": "Cập nhật thông báo theo tình trạng thực tế, sửa chính tả và thống nhất tên gọi.",
+      "accept": "Không còn hẹn thời điểm đã qua như tương lai; nội dung được duyệt lại.",
+      "sources": [
+        "src/pages/AboutUs/AboutUs.jsx:15",
+        "src/pages/LoginPage/LoginPage.jsx:78"
+      ]
+    },
+    {
+      "id": "UI09",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Xác nhận từ mã",
+      "title": "Chuyển trang luôn bị phủ loading 400ms",
+      "evidence": "App bật overlay theo mọi pathname và tắt bằng timeout cố định, không gắn với dữ liệu tải. Đã thấy overlay lúc chuyển Register và 404.",
+      "fix": "Gắn loading với tác vụ thực; dùng skeleton tại vùng nội dung khi cần.",
+      "accept": "Chuyển trang tĩnh không bị chặn; loading kết thúc theo request.",
+      "sources": [
+        "src/routes/App.jsx:34"
+      ]
+    },
+    {
+      "id": "UI10",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Mở trực tiếp trang làm bài/xem lại có thể crash",
+      "evidence": "QuizPage và ReviewQuizPage truy cập location.state.subjectId không kiểm tra null. Mở URL trực tiếp trong phiên đăng nhập không có navigation state sẽ ném lỗi. Chưa tái hiện bằng tài khoản.",
+      "fix": "Lấy quiz/môn theo URL và dữ liệu API; dùng state như thông tin bổ sung, có trạng thái lỗi.",
+      "accept": "Sau đăng nhập, dán link mới hoặc mở tab mới vẫn xem/làm bài được.",
+      "sources": [
+        "src/pages/QuizPage/QuizPage.jsx:30",
+        "src/pages/ReviewQuizPage/ReviewQuizPage.jsx:21"
+      ]
+    },
+    {
+      "id": "UI11",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Thiếu trạng thái lỗi, dữ liệu rỗng và thử lại",
+      "evidence": "QuizPage khi API lỗi chỉ console.log rồi vẫn hiện Đang tải câu hỏi; SubjectPage không có thông báo dữ liệu rỗng/lỗi; UserStats return sớm khi không có chương nhưng loading vẫn true.",
+      "fix": "Tách loading/error/empty/success, thêm nút thử lại và chặn nộp khi chưa có câu hỏi.",
+      "accept": "Mạng lỗi, đề rỗng, môn không có chương đều hiển thị đúng trạng thái.",
+      "sources": [
+        "src/pages/QuizPage/QuizPage.jsx:68",
+        "src/pages/SubjectPage/SubjectPage.jsx:74",
+        "src/components/UserStats/UserStats.jsx:53"
+      ]
+    },
+    {
+      "id": "UI12",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Thẻ điểm dùng điểm lần gần nhất thay điểm cao nhất",
+      "evidence": "QuizBox gọi getBest nhưng setBestScore(res.data.score), trong khi API có bestScore riêng. Nếu lần sau thấp hơn, thẻ tụt điểm dù điểm cao nhất không đổi.",
+      "fix": "Đọc đúng bestScore; phân biệt chưa làm với điểm 0 và ghi rõ tên chỉ số.",
+      "accept": "Làm lần 1 đạt 90, lần 2 đạt 50: điểm cao nhất vẫn 90.",
+      "sources": [
+        "src/pages/QuizListPage/QuizListPage.jsx:350"
+      ]
+    },
+    {
+      "id": "UI13",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Xác nhận từ mã",
+      "title": "Thống kê dễ diễn giải sai năng lực học tập",
+      "evidence": "UserStats lấy điểm tốt nhất của từng đề để gọi là điểm trung bình; chương chưa làm gán 0 rồi khuyên chưa đủ qua môn. Đây là chỉ số luyện tập, không đủ căn cứ kết luận điểm học phần.",
+      "fix": "Ghi rõ trung bình điểm tốt nhất; tách chưa có dữ liệu; thống nhất cách tính trọng số và bỏ khẳng định qua môn/A.",
+      "accept": "Người chưa làm thấy chưa có dữ liệu; mô tả chỉ số khớp phép tính.",
+      "sources": [
+        "src/components/UserStats/UserStats.jsx:67",
+        "src/components/UserStats/UserStats.jsx:117"
+      ]
+    },
+    {
+      "id": "UI14",
+      "group": "Giao diện",
+      "priority": "P2",
+      "status": "Xác nhận từ mã",
+      "title": "Đăng nhập xong mất trang người dùng định vào",
+      "evidence": "ProtectedRoute chuyển /login không lưu đích; LoginPage luôn chuyển /about. Bấm Môn học khi chưa đăng nhập đã được kiểm tra chuyển sang login.",
+      "fix": "Lưu đường dẫn đích nội bộ an toàn và quay lại sau đăng nhập.",
+      "accept": "Vào link môn/đề cần đăng nhập: đăng nhập xong trở về đúng link.",
+      "sources": [
+        "src/routes/ProtectedRoute.jsx:9",
+        "src/pages/LoginPage/LoginPage.jsx:25"
+      ]
+    },
+    {
+      "id": "UI15",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Modal tùy chọn có nguy cơ rộng 960px trên mobile",
+      "evidence": "ModalOptionQuiz đặt !w-[960px], chỉ override ở sm và md; dưới sm chưa có override chiều rộng. Chưa mở modal trực tiếp do chưa có phiên và đề.",
+      "fix": "Dùng width:min(960px,calc(100vw - khoảng đệm)); giới hạn chiều cao và cuộn nội dung.",
+      "accept": "Modal ở 360/390px không tràn ngang, nút bắt đầu/đóng luôn tiếp cận được.",
+      "sources": [
+        "src/components/ModalOptionQuiz/ModalOptionQuiz.jsx:74"
+      ]
+    },
+    {
+      "id": "UI16",
+      "group": "Giao diện",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Ảnh câu hỏi đường dẫn tương đối trỏ về localhost",
+      "evidence": "QuizPage/ReviewQuizPage ghép http://localhost:5000 cho q.image không bắt đầu bằng http. Người dùng triển khai thật sẽ tải từ máy của họ.",
+      "fix": "Dùng URL tài nguyên cấu hình theo môi trường hoặc URL hợp lệ từ server, có fallback ảnh lỗi.",
+      "accept": "Ảnh tương đối tải đúng trên môi trường triển khai, không mixed-content/localhost.",
+      "sources": [
+        "src/pages/QuizPage/QuizPage.jsx:256",
+        "src/pages/ReviewQuizPage/ReviewQuizPage.jsx:136"
+      ]
+    },
+    {
+      "id": "BE01",
+      "group": "Backend",
+      "priority": "P0",
+      "status": "Xác nhận từ mã",
+      "title": "Đặt lại mật khẩu không xác minh OTP trong yêu cầu đổi",
+      "evidence": "resetPassword chỉ nhận email/newPassword, kiểm tra OTP có tồn tại và còn hạn trong DB, không so mã người gửi. verifyForgotOtp không tạo bằng chứng bắt buộc dùng ở bước reset. Không thử khai thác vì sẽ đổi dữ liệu.",
+      "fix": "Yêu cầu và kiểm tra OTP hoặc bằng chứng reset dùng một lần; xóa OTP sau thành công; thêm kiểm thử âm.",
+      "accept": "Sai/thiếu OTP không đổi được mật khẩu kể cả khi tài khoản đang có OTP còn hạn.",
+      "sources": [
+        "backend/controllers/authController.js:297"
+      ]
+    },
+    {
+      "id": "BE02",
+      "group": "Backend",
+      "priority": "P0",
+      "status": "Xác nhận từ mã",
+      "title": "API sửa nội dung chưa có xác thực và quyền admin",
+      "evidence": "Các route ghi subjects/chapters/quizzes/questions/questionImages không gắn verifyToken/verifyAdmin; server cũng không gắn middleware bảo vệ chung. Giao diện ẩn nút không bảo vệ API.",
+      "fix": "Bảo vệ từng route ghi bằng xác thực và quyền; xác minh quyền với câu hỏi/quiz đích.",
+      "accept": "Không token trả 401; User thường trả 403; Admin hợp lệ mới sửa được. Không thử ghi dữ liệu trong lần rà này.",
+      "sources": [
+        "backend/routes/subjectRoutes.js:14",
+        "backend/routes/chapterRoutes.js:13",
+        "backend/routes/quizRoutes.js:17",
+        "backend/routes/questionRoutes.js:13",
+        "backend/routes/questionImageRoutes.js:13"
+      ]
+    },
+    {
+      "id": "BE03",
+      "group": "Backend",
+      "priority": "P0",
+      "status": "Xác nhận từ mã",
+      "title": "Bài nộp thiếu xác thực và kiểm tra chủ sở hữu",
+      "evidence": "submissionRoutes không gắn xác thực; controller nhận userId từ params/body để đọc hoặc cập nhật bài. Có thể đọc/ghi dưới danh tính khác nếu biết ID. Chưa thực hiện yêu cầu ghi thử.",
+      "fix": "Lấy danh tính từ token; chỉ chủ sở hữu hoặc Admin có quyền mới được đọc, chỉ người làm mới được nộp.",
+      "accept": "User A không xem/ghi bài User B; request không token bị từ chối.",
+      "sources": [
+        "backend/routes/submissionRoutes.js:16",
+        "backend/controllers/submissionController.js:31"
+      ]
+    },
+    {
+      "id": "BE04",
+      "group": "Backend",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Điểm do client gửi và đáp án chuẩn được gửi trước khi nộp",
+      "evidence": "addSubmission tin score/isCorrect/totalQuestions từ request; getQuizById trả toàn bộ question gồm answer. Với chế độ thi có tính điểm, client có thể biết đáp án và tự khai điểm.",
+      "fix": "Server tự chấm và giới hạn giá trị; tách dữ liệu làm bài tính điểm khỏi dữ liệu luyện tập/xem lời giải.",
+      "accept": "Thay score/isCorrect trên request không thay đổi điểm tính bởi server; chế độ tính điểm không nhận đáp án trước hạn.",
+      "sources": [
+        "backend/controllers/submissionController.js:33",
+        "backend/controllers/quizController.js:25"
+      ]
+    },
+    {
+      "id": "BE05",
+      "group": "Backend",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Khóa/xóa tài khoản hoặc đổi quyền không vô hiệu token hiện hữu",
+      "evidence": "refresh tin role/id trong JWT mà không đọc lại User; verifyToken cũng chỉ kiểm chữ ký. Token cũ còn hiệu lực có thể tiếp tục dùng quyền cũ tới lúc hết hạn.",
+      "fix": "Kiểm tra trạng thái và quyền hiện tại khi xác thực/refresh; thiết kế thu hồi phiên riêng nếu cần. Không tự thêm trường DB.",
+      "accept": "Tài khoản bị khóa/xóa không gọi API bảo vệ/refresh được; quyền hạ cấp có hiệu lực.",
+      "sources": [
+        "backend/controllers/authController.js:82",
+        "backend/middlewares/verifyToken.js:17"
+      ]
+    },
+    {
+      "id": "BE06",
+      "group": "Backend",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Log đăng ký ghi cả mật khẩu",
+      "evidence": "register console.log toàn bộ req.body trước validation, bao gồm password. Không đọc log thực tế hoặc trích thông tin người dùng.",
+      "fix": "Bỏ log body hoặc chỉ log trường được phép; tránh trả raw error nội bộ; cân nhắc giới hạn thử OTP/login ở tầng app/gateway.",
+      "accept": "Log không có password/OTP/token; lỗi trả về không lộ chi tiết nội bộ. Giới hạn tầng hạ tầng chưa được xác minh.",
+      "sources": [
+        "backend/controllers/authController.js:117"
+      ]
+    },
+    {
+      "id": "BE07",
+      "group": "Backend",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Xóa câu hỏi trong editor không xóa dữ liệu khi lưu",
+      "evidence": "Editor chỉ filter danh sách state; updateQuizFull chỉ cập nhật/thêm các câu còn trong payload, không xử lý các câu bị bỏ. getQuizById sẽ lấy lại các câu cũ.",
+      "fix": "Định nghĩa đồng bộ danh sách và thao tác xóa rõ ràng, kiểm tra quiz sở hữu câu hỏi, xử lý lỗi nhất quán.",
+      "accept": "Xóa một câu rồi lưu/tải lại: câu không quay lại. Sửa luồng ghi dữ liệu cần được duyệt riêng trước khi triển khai.",
+      "sources": [
+        "src/pages/EditQuizPage/EditQuizPage.jsx:59",
+        "backend/controllers/quizController.js:39"
+      ]
+    },
+    {
+      "id": "BE08",
+      "group": "Backend",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Đổi câu text thành ảnh có thể báo lưu thành công nhưng mất sửa đổi",
+      "evidence": "updateQuizFull chọn collection theo q.image mới; _id của câu vẫn ở collection cũ. findByIdAndUpdate có thể trả null nhưng bị bỏ qua, response vẫn thành công.",
+      "fix": "Xác định loại câu đang lưu trước cập nhật; xử lý chuyển loại và kết quả không tìm thấy; không nhận _id ngoài quiz.",
+      "accept": "Thêm/bỏ ảnh ở câu hiện hữu rồi tải lại không mất nội dung; thất bại trả lỗi rõ.",
+      "sources": [
+        "backend/controllers/quizController.js:42"
+      ]
+    },
+    {
+      "id": "BE09",
+      "group": "Backend",
+      "priority": "P2",
+      "status": "Xác nhận từ mã",
+      "title": "API thống kê theo môn truy vấn field không có trong Submission",
+      "evidence": "getAllSubmissionFromSubject lọc subjectId và populate chapterId, nhưng submission schema và addSubmission không có hai field này. Dữ liệu tạo qua app không thể đáp ứng truy vấn như dự định.",
+      "fix": "Ưu tiên suy ra môn/chương qua quizId và lọc quiz liên quan; không tự thêm cột/field/index.",
+      "accept": "Hai môn có bài làm riêng: API trả đúng từng môn, không lỗi populate.",
+      "sources": [
+        "backend/controllers/submissionController.js:138",
+        "backend/models/submission.js:10"
+      ]
+    },
+    {
+      "id": "TECH01",
+      "group": "Kỹ thuật",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Thao tác ẩn đề bỏ qua cấu hình API và token",
+      "evidence": "QuizBox gọi axios.put tới URL Render hardcode thay vì quizService. Khi đổi VITE_API_BASE_URL, thao tác vẫn gửi sang backend cũ và không qua interceptor gắn token. Chưa bấm vì có thay đổi DB.",
+      "fix": "Dùng quizService.updateAvailability với API instance duy nhất và kiểm tra status.",
+      "accept": "Mọi API dùng cùng môi trường; thao tác ẩn/hiện có token, không gọi nhầm backend.",
+      "sources": [
+        "src/pages/QuizListPage/QuizListPage.jsx:362"
+      ]
+    },
+    {
+      "id": "TECH02",
+      "group": "Kỹ thuật",
+      "priority": "P1",
+      "status": "Xác nhận từ mã",
+      "title": "Refresh token và xử lý lỗi HTTP không hoạt động như mô tả",
+      "evidence": "axiosInstance dùng validateStatus:()=>true nên 401/4xx/5xx vào nhánh success, không vào handler refresh. Backend còn trả 403 khi token hết hạn, trong khi frontend chỉ bắt 401. UI có thể báo lưu thành công dù API lỗi.",
+      "fix": "Thống nhất status với server; bỏ resolve mọi status hoặc xử lý rõ nhánh lỗi; bảo đảm queue/isRefreshing luôn được giải phóng.",
+      "accept": "401 hết hạn refresh một lần và retry; 403 quyền hạn không refresh; 400/500 không báo thành công.",
+      "sources": [
+        "src/api/axiosInstance.js:24",
+        "backend/middlewares/verifyToken.js:23"
+      ]
+    },
+    {
+      "id": "TECH03",
+      "group": "Kỹ thuật",
+      "priority": "P2",
+      "status": "Đã chạy kiểm tra",
+      "title": "Bundle lớn, ảnh nền nặng và lint chưa đạt",
+      "evidence": "npm run build thành công: SVG nền 8,151.69kB (gzip 2,210.64kB), JS 898.71kB (gzip 281.90kB), CSS 710.62kB. npm run lint: 83 errors, 9 warnings; có lỗi hooks và cấu hình globals Node, không đồng nghĩa 83 lỗi runtime.",
+      "fix": "Nén/thay SVG nền, chia chunk theo route; chỉnh cấu hình lint theo môi trường và sửa lỗi hooks trước, rồi dọn cảnh báo.",
+      "accept": "Build/lint đạt; đo tải trang cold-cache trước/sau trên mạng chậm.",
+      "sources": [
+        "package.json:10",
+        "src/pages/QuizPage/QuizPage.jsx:18"
+      ]
+    }
+  ]
+}

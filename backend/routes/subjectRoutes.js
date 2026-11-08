@@ -1,18 +1,10 @@
 import express from "express";
-import {
-  getSubjects,
-  addSubject,
-  getSubjectById,
-  deleteSubject,
-  updateSubjectAvailability,
-} from "../controllers/subjectController.js";
-
+import { getSubjects, addSubject, getSubjectById, deleteSubject, updateSubjectAvailability } from "../controllers/subjectController.js";
+import { verifyAdmin } from "../middlewares/verifyToken.js";
 const router = express.Router();
-
 router.get("/", getSubjects);
 router.get("/:id", getSubjectById);
-router.post("/", addSubject);
-router.delete("/:id", deleteSubject);
-router.put("/:id",updateSubjectAvailability)
-
+router.post("/", verifyAdmin, addSubject);
+router.delete("/:id", verifyAdmin, deleteSubject);
+router.put("/:id", verifyAdmin, updateSubjectAvailability);
 export default router;

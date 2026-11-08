@@ -1,253 +1,140 @@
-import { useNavigate, useParams } from "react-router-dom";
-import "./EditQuizPage.css";
-import { useEffect, useState } from "react";
-import DefaultAlert from "../../components/AlertBoxes/DefaultAlert";
-import quizService from "../../services/quizService";
-import chapterService from "../../services/chapterService";
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import quizService from '../../services/quizService';
+import chapterService from '../../services/chapterService';
+import { resolveAssetUrl } from '../../utils/apiConfig';
 export default function EditQuizPage() {
-  const { id } = useParams();
-  const [quiz, setQuiz] = useState();
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showSaving, setShowSaving] = useState(false);
-  const [chapters, setChapters] = useState([]);
-
-  const navigate = useNavigate();
-  //Lấy quiz
+  const {
+      id
+    } = useParams(),
+    navigate = useNavigate();
+  const [quiz, setQuiz] = useState(null),
+    [questions, setQuestions] = useState([]),
+    [chapters, setChapters] = useState([]);
+  const [loading, setLoading] = useState(true),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState(''),
+    [retry, setRetry] = useState(0);
+  const pending = useRef(false);
   useEffect(() => {
-    quizService
-      .getById(id)
-      .then(async (res) => {
+    let current = true;
+    setLoading(true);
+    setError('');
+    setQuiz(null);
+    quizService.getById(id).then(async res => {
+      const subject = res.data.subjectId?._id || res.data.subjectId;
+      const response = await chapterService.getBySubject(subject);
+      if (current) {
         setQuiz(res.data);
         setQuestions(res.data.questions || []);
-
-        const chaptersRes = await chapterService.getBySubject(
-          res.data.subjectId
-        );
-        setChapters(chaptersRes.data);
-      })
-
-      .catch((err) => console.log("Lỗi khi tải quiz:", err))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  const handleQuizChange = (field, value) => {
-    setQuiz((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleQuestionChange = (index, field, value) => {
-    setQuestions((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+        setChapters(response.data);
+      }
+    }).catch(failure => {
+      if (current) setError(failure.response?.data?.message || 'Không tải được bộ đề.');
+    }).finally(() => {
+      if (current) setLoading(false);
     });
-  };
-
-  const handleAddQuestion = (hasImage = false) => {
-    const newQuestion = {
-      question: "",
-      options: ["", "", "", ""],
-      answer: "",
-      explain: "",
-      image: hasImage ? "https://example.com/sample.jpg" : "",
+    return () => {
+      current = false;
     };
-    setQuestions((prev) => [...prev, newQuestion]);
-  };
-
-  const handleDeleteQuestion = (index) => {
-    if (confirm("Bạn có chắc muốn xóa câu hỏi này không?")) {
-      setQuestions((prev) => prev.filter((_, i) => i !== index));
+  }, [id, retry]);
+  function updateQuestion(index, field, value) {
+    setQuestions(previous => previous.map((q, i) => i === index ? {
+      ...q,
+      [field]: value
+    } : q));
+  }
+  function updateOption(index, optionIndex, value) {
+    setQuestions(previous => previous.map((q, i) => {
+      if (i !== index) return q;
+      const options = [...q.options];
+      const old = options[optionIndex];
+      options[optionIndex] = value;
+      return {
+        ...q,
+        options,
+        answer: q.answer === old ? value : q.answer
+      };
+    }));
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (pending.current || !quiz) return;
+    setError('');
+    if (!quiz.name?.trim() || quiz.name.trim().length > 300) {
+      setError('Tên bộ đề phải có từ 1 đến 300 ký tự.');
+      return;
     }
-  };
-
-  const handleSave = async () => {
-    setShowSaving(true);
+    if (!Number.isFinite(Number(quiz.timeLimit)) || Number(quiz.timeLimit) < 0) {
+      setError('Thời gian làm bài phải là số không âm.');
+      return;
+    }
+    const normalized = questions.map(q => ({
+      ...q,
+      question: q.question.trim(),
+      options: q.options.map(o => o.trim()),
+      answer: q.answer.trim(),
+      image: (q.image || '').trim()
+    }));
+    for (let i = 0; i < normalized.length; i++) {
+      const q = normalized[i];
+      if (!q.question || q.options.length < 2 || q.options.some(o => !o) || new Set(q.options).size !== q.options.length || !q.options.includes(q.answer)) {
+        setError(`Câu ${i + 1}: cần nội dung, ít nhất hai lựa chọn không trùng và một đáp án đúng.`);
+        return;
+      }
+      if (q.image && !resolveAssetUrl(q.image)) {
+        setError(`Câu ${i + 1}: đường dẫn ảnh không hợp lệ.`);
+        return;
+      }
+    }
+    pending.current = true;
+    setSaving(true);
     try {
       await quizService.updateFull(id, {
-        name: quiz.name,
-        timeLimit: quiz.timeLimit,
-        chapterId: quiz.chapterId,
-        questions: questions.map((q) => {
-          const obj = {
-            question: q.question,
-            options: q.options,
-            answer: q.answer,
-            explain: q.explain,
-            image: q.image,
-          };
-          if (q._id) obj._id = q._id;
-          return obj;
-        }),
+        name: quiz.name.trim(),
+        timeLimit: Number(quiz.timeLimit),
+        chapterId: quiz.chapterId?._id || quiz.chapterId || null,
+        questions: normalized.map(q => ({
+          ...(q._id ? {
+            _id: q._id
+          } : {}),
+          question: q.question,
+          options: q.options,
+          answer: q.answer,
+          explain: q.explain || '',
+          image: q.image
+        }))
       });
-      navigate(`/subject/edit/${quiz.subjectId}`);
-    } catch (error) {
-      console.error("Lỗi khi cập nhật quiz:", error);
-      alert("❌ Lỗi khi cập nhật quiz!");
+      navigate(`/subject/edit/${quiz.subjectId?._id || quiz.subjectId}`);
+    } catch (failure) {
+      setError(failure.response?.data?.partialWrite ? 'Lưu đề gặp lỗi giữa chừng. Hãy tải lại đề để kiểm tra dữ liệu trước khi lưu lại.' : failure.response?.data?.message || 'Chưa lưu được thay đổi. Vui lòng thử lại.');
+    } finally {
+      pending.current = false;
+      setSaving(false);
     }
-  };
-
-  if (loading) return <div>Đang tải...</div>;
-
-  return (
-    <div className="w-full pb-16 text-xl flex flex-col bg-white mt-4 shadow-black shadow-sm rounded-[8px]">
-      <div className="flex justify-between items-center px-8 pt-8 sticky top-0 bg-white rounded-md">
-        <div>
-          <input
-            type="text"
-            value={quiz?.name || ""}
-            onChange={(e) => handleQuizChange("name", e.target.value)}
-            className="text-3xl font-bold border-b-2 px-2 border-gray-400 focus:outline-none focus:border-blue-500 rounded-[8px]"
-          />
-          <div className="mt-3">
-            Chương:{" "}
-            <select
-              value={quiz?.chapterId || ""}
-              onChange={(e) => handleQuizChange("chapterId", e.target.value)}
-              className="border border-gray-400 rounded-md p-2 ml-2"
-            >
-              <option value="">-- Chọn chương --</option>
-              {chapters.map((ch) => (
-                <option key={ch._id} value={ch._id}>
-                  {ch.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-3 rounded-[8px]">
-            Thời gian làm bài (phút):{" "}
-            <input
-              type="number"
-              value={quiz?.timeLimit || 0}
-              onChange={(e) =>
-                handleQuizChange("timeLimit", Number(e.target.value))
-              }
-              className="border border-gray-400 rounded-md p-2 w-24"
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={handleSave}
-          className="px-6 py-3 bg-[#31872D] text-white rounded-lg hover:bg-[#548d4f] transition-all duration-700"
-        >
-          Lưu thay đổi
-        </button>
-      </div>
-
-      <div className="w-[90%] mx-auto">
-        {questions?.map((question, i) => (
-          <QuestionEditBox
-            key={question._id || i}
-            question={question}
-            i={i}
-            onChange={(field, value) => handleQuestionChange(i, field, value)}
-            onDelete={() => handleDeleteQuestion(i)}
-          />
-        ))}
-
-        <div className="flex gap-4 mt-6">
-          <button
-            onClick={() => handleAddQuestion(false)}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-          >
-            Thêm câu hỏi text
-          </button>
-          <button
-            onClick={() => handleAddQuestion(true)}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-          >
-            Thêm câu hỏi có ảnh
-          </button>
-        </div>
-      </div>
-      {showSaving && (
-        <DefaultAlert
-          title="Đang lưu môn học"
-          information="Đang lưu môn học, vui lòng chờ, quá trình này có thể kéo dài nếu bộ đề quá nhiều câu hỏi."
-          closeButton={() => {
-            setShowSaving(false);
-          }}
-        ></DefaultAlert>
-      )}
-    </div>
-  );
-}
-
-function QuestionEditBox({ question, i, onChange, onDelete }) {
-  const handleOptionChange = (optIndex, value) => {
-    const updatedOptions = [...question.options];
-    updatedOptions[optIndex] = value;
-    onChange("options", updatedOptions);
-  };
-
-  return (
-    <div className="p-6 bg-gray-50 border border-gray-300 rounded-lg mb-6 shadow-sm">
-      <div className="flex justify-between">
-        <p className="text-xl font-semibold mb-2">Câu {i + 1}</p>
-        <button
-          onClick={onDelete}
-          className="text-white bg-red-400 hover:bg-red-500 transform-all duration-500 font-bold px-4 py-2 rounded-[8px] mb-4"
-        >
-          Xóa
-        </button>
-      </div>
-
-      {/* Nội dung câu hỏi */}
-      <input
-        type="text"
-        value={question.question}
-        onChange={(e) => onChange("question", e.target.value)}
-        className="w-full border border-gray-300 rounded-md p-2 mb-3"
-        placeholder="Nhập nội dung câu hỏi..."
-      />
-
-      {/* Hình ảnh nếu có */}
-      {question.image && (
-        <div className="mb-3">
-          <img
-            src={question.image}
-            alt="question"
-            className="max-w-xs mb-2 rounded shadow"
-          />
-          <input
-            type="text"
-            value={question.image}
-            onChange={(e) => onChange("image", e.target.value)}
-            className="w-full border border-gray-300 rounded-md p-2"
-            placeholder="Đường dẫn ảnh (URL)"
-          />
-        </div>
-      )}
-
-      {/* Đáp án */}
-      <div className="space-y-2 mb-3">
-        {question.options.map((option, j) => (
-          <div key={j} className="flex items-center gap-3">
-            <input
-              type="radio"
-              checked={option === question.answer}
-              onChange={() => onChange("answer", option)}
-            />
-            <input
-              type="text"
-              value={option}
-              onChange={(e) => handleOptionChange(j, e.target.value)}
-              className="flex-1 border border-gray-300 rounded-md p-2"
-              placeholder={`Đáp án ${j + 1}`}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Giải thích */}
-      <textarea
-        value={question.explain || ""}
-        onChange={(e) => onChange("explain", e.target.value)}
-        className="w-full border border-gray-300 rounded-md p-2"
-        rows={2}
-        placeholder="Giải thích (nếu có)"
-      />
-    </div>
-  );
+  }
+  if (loading) return <p role="status" className="p-8">Đang tải bộ đề...</p>;
+  if (!quiz) return <section className="p-8" role="alert"><p>{error || 'Không tìm thấy bộ đề.'}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> <Link to="/subject/edit">Về môn học</Link></section>;
+  return <form className="p-8 bg-white" noValidate onSubmit={save} aria-busy={saving}><h1>Chỉnh sửa bộ đề</h1>{error && <p role="alert" className="p-4 bg-red-50 text-red-900 border border-red-700 rounded-lg">{error}</p>}{saving && <p role="status">Đang lưu bộ đề...</p>}<fieldset disabled={saving}><div className="flex gap-6 items-end flex-wrap mb-8"><label>Tên bộ đề<input className="block border rounded-lg p-2" value={quiz.name || ''} onChange={e => setQuiz(q => ({
+            ...q,
+            name: e.target.value
+          }))} required maxLength={300} /></label><label>Chương<select className="block border rounded-lg p-2" value={quiz.chapterId?._id || quiz.chapterId || ''} onChange={e => setQuiz(q => ({
+            ...q,
+            chapterId: e.target.value
+          }))}><option value="">Chưa chọn chương</option>{chapters.map(ch => <option key={ch._id} value={ch._id}>{ch.name}</option>)}</select></label><label>Thời gian làm bài (phút)<input type="number" min="0" className="block border rounded-lg p-2 w-28" value={quiz.timeLimit ?? 0} onChange={e => setQuiz(q => ({
+            ...q,
+            timeLimit: e.target.value
+          }))} /></label><button type="submit" className="bg-green-800 text-white px-6 py-3 rounded-lg">Lưu thay đổi</button></div>
+    {!questions.length && <p>Bộ đề chưa có câu hỏi. Bạn có thể thêm câu hỏi bên dưới.</p>}
+    {questions.map((q, i) => <fieldset key={q._id || q.localId || i} className="p-6 bg-gray-50 border rounded-xl mb-6"><legend className="text-xl font-bold">Câu {i + 1}</legend><button type="button" className="text-red-900 border border-red-600 rounded p-2 mb-4" onClick={() => {
+          if (window.confirm('Xóa câu hỏi này khỏi danh sách? Thay đổi chỉ được áp dụng khi lưu.')) setQuestions(previous => previous.filter((_, index) => index !== i));
+        }}>Xóa câu {i + 1}</button><label className="block">Nội dung câu hỏi<input className="w-full border rounded p-2 my-2" value={q.question} onChange={e => updateQuestion(i, 'question', e.target.value)} required /></label><label className="block">Đường dẫn ảnh (tùy chọn)<input className="w-full border rounded p-2 my-2" value={q.image || ''} onChange={e => updateQuestion(i, 'image', e.target.value)} /></label>{q.image && resolveAssetUrl(q.image) && <img src={resolveAssetUrl(q.image)} alt={`Minh họa câu ${i + 1}`} className="max-w-xs max-h-64 object-contain my-4" />}<fieldset><legend className="text-base">Các lựa chọn và đáp án đúng</legend>{q.options.map((option, j) => <div className="flex items-center gap-3 my-2" key={j}><label><input type="radio" name={`correct-${q._id || q.localId || i}`} checked={Boolean(option) && option === q.answer} onChange={() => updateQuestion(i, 'answer', option)} aria-label={`Chọn lựa chọn ${j + 1} làm đáp án đúng cho câu ${i + 1}`} /></label><label className="flex-1">Lựa chọn {j + 1}<input className="w-full border rounded p-2 block" value={option} onChange={e => updateOption(i, j, e.target.value)} required /></label></div>)}</fieldset><label className="block mt-4">Giải thích<textarea className="block w-full border rounded p-2" rows={2} value={q.explain || ''} onChange={e => updateQuestion(i, 'explain', e.target.value)} /></label></fieldset>)}
+    <button type="button" className="bg-green-800 text-white p-3 rounded-lg" onClick={() => setQuestions(previous => [...previous, {
+        localId: crypto.randomUUID(),
+        question: '',
+        options: ['', '', '', ''],
+        answer: '',
+        explain: '',
+        image: ''
+      }])}>Thêm câu hỏi</button></fieldset></form>;
 }

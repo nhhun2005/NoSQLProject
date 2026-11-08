@@ -1,126 +1,88 @@
 import "./SubjectPage.css";
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-
 import { useSelector } from "react-redux"; //
 
 import ConfirmAlert from "../../components/AlertBoxes/ConfirmAlert";
 import CreateSubjectModal from "../../components/CreateSubJectModal/CreateSubjectModal";
 import subjectService from "../../services/subjectService";
-
 export default function SubjectPage() {
   const [showCreateSubjectModal, setShowCreateSubjectModal] = useState(false);
   const [subjects, setSubjects] = useState([]);
-  const type = useSelector((state) => state.viewMode.mode);
+  const [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [retry, setRetry] = useState(0);
+  const type = useSelector(state => state.viewMode.mode);
   const navigate = useNavigate();
-  const account = useSelector((state) => state.user.account); //
+  const account = useSelector(state => state.user.account); //
 
-  //
   useEffect(() => {
-    subjectService
-      .getAll()
-      .then((res) => {
-        setSubjects(res.data);
-      })
-      .catch((err) => {
-        console.log("Gap loi khi lay subject: ", err);
-      });
-  }, []);
-  const reFetchSubjects = async () => {
-    // try {
-    //   subjectService
-    //     .getAll()
-    //     .then((res) => {
-    //       setSubjects(res.data);
-    //     })
-    //     .catch((err) => {
-    //       console.log("Gap loi khi lay subject: ", err);
-    //     });
-    // } catch (err) {
-    //   console.log("Gap loi khi lay subject: ", err);
-    // }
-    location.reload();
-  };
-
-  return (
-    <div className="w-full min-h-screen bg-white flex flex-col overflow-y-auto">
+    let current = true;
+    setLoading(true);
+    setError('');
+    subjectService.getAll().then(res => {
+      if (current) setSubjects(res.data);
+    }).catch(failure => {
+      if (current) setError(failure.response?.data?.message || 'Không tải được danh sách môn học.');
+    }).finally(() => {
+      if (current) setLoading(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [retry]);
+  const reFetchSubjects = () => setRetry(v => v + 1);
+  if (loading) return <p role="status" className="p-8">Đang tải môn học...</p>;
+  if (error) return <section role="alert" className="p-8"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
+  return <div className="w-full min-h-screen bg-white flex flex-col overflow-y-auto">
       <div className=" mx-24 my-24">
         <div id="subjectPageTitle" className="text-[#272b41]">
-          {type == "view" ? (
-            <h1 className="text-[#31872D]">Làm Bài Trực Tuyến</h1>
-          ) : (
-            <h1 className="text-[#31872D]">Chỉnh Sửa Môn Học</h1>
-          )}
+          {type == "view" ? <h1 className="text-[#31872D]">Làm Bài Trực Tuyến</h1> : <h1 className="text-[#31872D]">Chỉnh Sửa Môn Học</h1>}
 
           <div className="relative flex flex-row w-full h-auto  justify-between">
             <p className="mx-8 text-xl">Danh sách các môn học sẵn có</p>
-            {account.role === "Admin" && ( //
-              <div
-                className="absolute right-[5%] rounded-2 text-2xl text-[#e7e7e7]  shadow-black px-8 py-4 select-none cursor-pointer
+            {account.role === "Admin" &&
+          //
+          <button type="button" className="absolute right-[5%] rounded-2 text-2xl text-[#e7e7e7]  shadow-black px-8 py-4 select-none cursor-pointer
                         bg-[#31872D] transition-all duration-500 hover:scale-105
-                        "
-                onClick={() => {
-                  setShowCreateSubjectModal(true);
-                }}
-              >
+                        " onClick={() => {
+            setShowCreateSubjectModal(true);
+          }}>
                 Thêm môn học
-              </div>
-            )}
+              </button>}
           </div>
         </div>
 
+        {!subjects.some(subject => subject.availability || account.role === "Admin") && <p className="p-8">Chưa có môn học được công khai.</p>}
         <div className="w-[90%] mx-auto my-12 grid grid-cols-3 gap-18">
-          {subjects.length > 0 &&
-            subjects.map((subject, i) => {
-              if (!subject.availability) {
-                return;
-              }
-              return (
-                <SubjectBox
-                  key={`subject_${i}`}
-                  navigate={navigate}
-                  subject={subject}
-                  type={type}
-                  reFetchSubjects={reFetchSubjects}
-                ></SubjectBox>
-              );
-            })}
-          {subjects.length > 0 &&
-            subjects.map((subject, i) => {
-              if (!subject.availability && account.role == "Admin") {
-                return (
-                  <SubjectBox
-                    key={`subject_${i}`}
-                    navigate={navigate}
-                    subject={subject}
-                    type={type}
-                    reFetchSubjects={reFetchSubjects}
-                  ></SubjectBox>
-                );
-              }
-            })}
+          {subjects.length > 0 && subjects.map((subject, i) => {
+          if (!subject.availability) {
+            return;
+          }
+          return <SubjectBox key={`subject_${i}`} navigate={navigate} subject={subject} type={type} reFetchSubjects={reFetchSubjects}></SubjectBox>;
+        })}
+          {subjects.length > 0 && subjects.map((subject, i) => {
+          if (!subject.availability && account.role == "Admin") {
+            return <SubjectBox key={`subject_${i}`} navigate={navigate} subject={subject} type={type} reFetchSubjects={reFetchSubjects}></SubjectBox>;
+          }
+        })}
         </div>
       </div>
-      {showCreateSubjectModal && (
-        <CreateSubjectModal
-          setShowCreateSubjectModal={setShowCreateSubjectModal}
-        ></CreateSubjectModal>
-      )}
-    </div>
-  );
+      {showCreateSubjectModal && <CreateSubjectModal setShowCreateSubjectModal={setShowCreateSubjectModal}></CreateSubjectModal>}
+    </div>;
 }
-
-function SubjectBox({ subject, navigate, type, reFetchSubjects }) {
+function SubjectBox({
+  subject,
+  navigate,
+  type,
+  reFetchSubjects
+}) {
   const [showConfirm, setShowConfirm] = useState(0);
-  return (
-    <div className="relative w-[100%] shadow-sm shadow-black justify-items-center overflow-hidden rounded-xl">
+  const [error, setError] = useState("");
+  return <div className="relative w-[100%] shadow-sm shadow-black justify-items-center overflow-hidden rounded-xl">
+      {error && <p role="alert" className="p-4 text-red-800">{error}</p>}
       <div className="h-[312px] w-full p-2 rounded-xl">
-        <img
-          src={subject.image}
-          atl={`Url: ${subject.image}`}
-          className="w-full h-full object-cover object-center"
-        ></img>
+        <img src={subject.image} alt={subject.name} className="w-full h-full object-cover object-center"></img>
       </div>
       <div className="my-2  w-full flex justify-center">
         <p className="text-center text-[32px] line-clamp-1 px-4">
@@ -132,58 +94,36 @@ function SubjectBox({ subject, navigate, type, reFetchSubjects }) {
           {subject.description}
         </p>
       </div>
-      {type == "view" ? (
-        <div
-          onClick={() => {
-            navigate(`/subject/view/${subject._id}`);
-          }}
-          className=" transition-all duration-500 w-[50%] px-4 font-semibold mx-auto mb-4 h-[2rem] bg-[#31872D] hover:scale-105  rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer"
-        >
+      {type == "view" ? <button type="button" onClick={() => {
+      navigate(`/subject/view/${subject._id}`);
+    }} className=" transition-all duration-500 w-[50%] px-4 font-semibold mx-auto mb-4 h-[2rem] bg-[#31872D] hover:scale-105  rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer">
           Vào học →
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 justify-items-center pb-2 mx-8 gap-4 my-2">
-          <div
-            onClick={() => {
-              navigate(`/subject/edit/${subject._id}`);
-            }}
-            className=" transition-all duration-500 px-4  font-semibold w-full h-[2rem] bg-[#31872D] hover:scale-105 rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer"
-          >
+        </button> : <div className="grid grid-cols-2 justify-items-center pb-2 mx-8 gap-4 my-2">
+          <button type="button" onClick={() => {
+        navigate(`/subject/edit/${subject._id}`);
+      }} className=" transition-all duration-500 px-4  font-semibold w-full h-[2rem] bg-[#31872D] hover:scale-105 rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer">
             Chỉnh sửa →
-          </div>
-          <div
-            onClick={() => {
-              setShowConfirm(true);
-            }}
-            className={` transition-all duration-500 px-4 font-semibold w-full h-[2rem] ${
-              subject.availability ? "bg-[#ff6b6b]" : "bg-[#31872D]"
-            } hover:scale-105 rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer`}
-          >
+          </button>
+          <button type="button" onClick={() => {
+        setShowConfirm(true);
+      }} className={` transition-all duration-500 px-4 font-semibold w-full h-[2rem] ${subject.availability ? "bg-[#ff6b6b]" : "bg-[#31872D]"} hover:scale-105 rounded-xl flex justify-center items-center text-[#e7e7e7] cursor-pointer`}>
             {subject.availability ? "Ẩn" : "Hiện"}
-          </div>
+          </button>
 
-          {showConfirm == 1 && (
-            <ConfirmAlert
-              title="Thay đổi trạng thái môn học"
-              information="Bạn có chắc chắn muốn thay đổi trạng thái môn học này không?"
-              isNegative={subject.availability}
-              confirmButton={async () => {
-                try {
-                  await subjectService.updateAvailability(subject._id, {
-                    availability: !subject.availability,
-                  });
-                  reFetchSubjects();
-                } catch (err) {
-                  console.log("Khong xoa duoc subject");
-                }
-              }}
-              closeButton={() => {
-                setShowConfirm(0);
-              }}
-            ></ConfirmAlert>
-          )}
-        </div>
-      )}
-    </div>
-  );
+          {showConfirm == 1 && <ConfirmAlert title="Thay đổi trạng thái môn học" information="Bạn có chắc chắn muốn thay đổi trạng thái môn học này không?" isNegative={subject.availability} confirmButton={async () => {
+        try {
+          await subjectService.updateAvailability(subject._id, {
+            availability: !subject.availability
+          });
+          setShowConfirm(0);
+          reFetchSubjects();
+        } catch {
+          setShowConfirm(0);
+          setError("Không đổi được trạng thái môn học. Vui lòng thử lại.");
+        }
+      }} closeButton={() => {
+        setShowConfirm(0);
+      }}></ConfirmAlert>}
+        </div>}
+    </div>;
 }
