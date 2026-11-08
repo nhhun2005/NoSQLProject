@@ -6,6 +6,7 @@ import ContributionPreview from "../../components/ContributionPreview";
 import contributedService from "../../services/contributedService";
 import subjectService from "../../services/subjectService";
 import chapterService from "../../services/chapterService";
+import { getQuestionValidationErrors } from "../../utils/contributionQuestions";
 
 export default function ContributedQuizPage() {
   const { account, isAuthenticated } = useSelector((state) => state.user);
@@ -144,7 +145,14 @@ export default function ContributedQuizPage() {
     try {
       const res = await contributedService.importPreview(formData);
       setPreviewData(res.data);
-      setImportStatus("✅ Trích xuất nội dung thành công! Vui lòng kiểm tra bản xem trước.");
+      const invalidCount = (res.data.questions || []).filter(
+        (q) => getQuestionValidationErrors(q).length > 0
+      ).length;
+      setImportStatus(invalidCount > 0
+        ? `⚠️ Đã trích xuất nội dung, nhưng có ${invalidCount} câu cần sửa. Chưa thể gửi duyệt; xem các câu lỗi bên dưới.`
+        : res.data.warnings?.length > 0
+          ? "⚠️ Đã trích xuất nội dung có cảnh báo. Vui lòng đối chiếu bản gốc trước khi gửi duyệt."
+          : "✅ Trích xuất nội dung thành công! Vui lòng kiểm tra bản xem trước.");
 
       // If quiz name is empty, auto-fill with suggested title from import
       if (!quizName.trim() && res.data.name) {
@@ -224,6 +232,17 @@ export default function ContributedQuizPage() {
 
     if (!isMetadataValid) {
       setSubmitStatus(`⚠️ ${metadataError}`);
+      return;
+    }
+
+    const questions = previewData.questions || [];
+    if (questions.length === 0 || questions.length > 200) {
+      setSubmitStatus("⚠️ Đề phải có từ 1 đến 200 câu hỏi.");
+      return;
+    }
+    const invalidIndex = questions.findIndex((q) => getQuestionValidationErrors(q).length > 0);
+    if (invalidIndex !== -1) {
+      setSubmitStatus(`⚠️ Câu ${invalidIndex + 1}: ${getQuestionValidationErrors(questions[invalidIndex]).join("; ")}`);
       return;
     }
 
@@ -718,6 +737,9 @@ export default function ContributedQuizPage() {
 
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                   <h4 className="font-bold text-green-800 mb-2">📊 Đối với file CSV mẫu chuẩn:</h4>
+                  <p className="text-gray-600 mb-2">
+                    Mỗi câu chỉ hỗ trợ một đáp án đúng. Cột <code>answer</code> phải khớp nguyên văn một phương án; không ghép nhiều đáp án bằng dấu <code>;</code>.
+                  </p>
                   <p className="text-gray-600 mb-2">
                     Các cột: <code>question, options, answer, explain</code> (mã hóa UTF-8, các phương án phân tách bởi dấu chấm phẩy <code>;</code>):
                   </p>

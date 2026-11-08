@@ -11,6 +11,7 @@ import {
 } from "../services/geminiContribution.js";
 import {
   validateContributionSubmission,
+  getQuestionValidationErrors,
   ValidationError
 } from "../utils/contributionValidation.js";
 
@@ -37,44 +38,38 @@ function buildCsvPreview(rows, defaultTitle) {
     const indexStr = `Dòng ${i + 1}`;
 
     const qRaw = r.question ? String(r.question).replace(/^"|"$/g, "").trim() : "";
-    if (!qRaw) {
-      warnings.push(`${indexStr}: Bỏ qua vì thiếu nội dung câu hỏi.`);
-      continue;
-    }
-
     const optRaw = r.options ? String(r.options).replace(/^"|"$/g, "").trim() : "";
     const options = optRaw
-      .split(";")
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0);
-
-    const uniqueOptions = Array.from(new Set(options));
-
-    if (uniqueOptions.length < 2) {
-      warnings.push(`${indexStr}: Có ít hơn 2 phương án lựa chọn.`);
-    }
+      ? optRaw.split(";").map((o) => o.trim())
+      : [];
 
     let ans = r.answer ? String(r.answer).replace(/^"|"$/g, "").trim() : "";
-    if (!ans) {
-      warnings.push(`${indexStr}: Chưa có đáp án đúng.`);
-    } else if (!uniqueOptions.includes(ans)) {
-      const match = uniqueOptions.find((o) => o.toLowerCase() === ans.toLowerCase());
-      if (match) {
-        ans = match;
-      } else {
-        warnings.push(`${indexStr}: Đáp án "${ans}" không khớp với phương án nào.`);
-        ans = "";
+    if (ans) {
+      if (!options.includes(ans)) {
+        const caseMatches = options.filter(
+          (o) => o.toLowerCase() === ans.toLowerCase()
+        );
+        if (caseMatches.length === 1) {
+          ans = caseMatches[0];
+        }
       }
     }
 
     const explain = r.explain ? String(r.explain).replace(/^"|"$/g, "").trim() : "";
 
-    questions.push({
+    const questionObj = {
       question: qRaw,
-      options: uniqueOptions,
+      options,
       answer: ans,
       explain
+    };
+
+    const rowErrors = getQuestionValidationErrors(questionObj, indexStr, {
+      isPreview: true
     });
+    warnings.push(...rowErrors);
+
+    questions.push(questionObj);
   }
 
   if (questions.length === 0) {

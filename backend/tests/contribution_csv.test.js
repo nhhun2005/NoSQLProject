@@ -281,7 +281,7 @@ test("handleCSVUpload controller - 400 and temp file cleanup when all rows are i
     await handleCSVUpload(req, res);
 
     assert.equal(res.statusCode, 400);
-    assert.equal(res.data.message, "File CSV không chứa câu hỏi hợp lệ!");
+    assert.match(res.data.message, /Câu hỏi số 1/);
     assert.ok(!fs.existsSync(filePath), "Temp file must be removed");
   } finally {
     fs.rmSync(testDir, { recursive: true, force: true });

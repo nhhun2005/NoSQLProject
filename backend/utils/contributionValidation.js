@@ -22,6 +22,118 @@ export class ValidationError extends Error {
 }
 
 /**
+ * Validates a single question object and returns an array of error messages.
+ * Shared between preview warning generation and submit validation.
+ * @param {object} q
+ * @param {string} [indexStr="Câu hỏi số 1"]
+ * @param {object} [options={}]
+ * @param {boolean} [options.isPreview=false]
+ * @returns {Array<string>} list of error messages (empty if valid)
+ */
+export function getQuestionValidationErrors(
+  q,
+  indexStr = "Câu hỏi số 1",
+  { isPreview = false } = {}
+) {
+  const errors = [];
+
+  if (!q || typeof q !== "object") {
+    errors.push(`${indexStr}: Dữ liệu câu hỏi không hợp lệ.`);
+    return errors;
+  }
+
+  // Validate question text
+  if (typeof q.question !== "string" || !q.question.trim()) {
+    errors.push(`${indexStr}: Nội dung câu hỏi không được để trống.`);
+  } else if (q.question.trim().length > MAX_QUESTION_LENGTH) {
+    errors.push(
+      `${indexStr}: Nội dung câu hỏi quá dài (tối đa ${MAX_QUESTION_LENGTH} ký tự).`
+    );
+  }
+
+  // Validate options
+  if (!Array.isArray(q.options)) {
+    errors.push(`${indexStr}: Danh sách phương án trả lời không hợp lệ.`);
+  } else {
+    if (q.options.length < MIN_OPTIONS || q.options.length > MAX_OPTIONS) {
+      errors.push(
+        `${indexStr}: Số lượng phương án phải từ ${MIN_OPTIONS} đến ${MAX_OPTIONS} lựa chọn.`
+      );
+    }
+
+    let hasNonString = false;
+    let hasBlank = false;
+    let hasTooLong = false;
+    const trimmedOptions = [];
+
+    for (let optIdx = 0; optIdx < q.options.length; optIdx++) {
+      const opt = q.options[optIdx];
+      if (typeof opt !== "string") {
+        hasNonString = true;
+      } else {
+        const trimmed = opt.trim();
+        if (trimmed.length === 0) {
+          hasBlank = true;
+        } else if (trimmed.length > MAX_OPTION_LENGTH) {
+          hasTooLong = true;
+        }
+        trimmedOptions.push(trimmed);
+      }
+    }
+
+    if (hasNonString) {
+      errors.push(`${indexStr}: Phương án trả lời phải là chuỗi ký tự.`);
+    }
+    if (hasBlank) {
+      errors.push(`${indexStr}: Có phương án trả lời bị để trống.`);
+    }
+    if (hasTooLong) {
+      errors.push(
+        `${indexStr}: Phương án trả lời quá dài (tối đa ${MAX_OPTION_LENGTH} ký tự).`
+      );
+    }
+
+    const uniqueSet = new Set(trimmedOptions);
+    if (uniqueSet.size !== trimmedOptions.length) {
+      errors.push(
+        `${indexStr}: Các phương án lựa chọn không được trùng lặp nội dung.`
+      );
+    }
+
+    // Validate answer
+    if (typeof q.answer !== "string" || !q.answer.trim()) {
+      errors.push(
+        `${indexStr}: ${isPreview ? "Chưa có đáp án đúng." : "Chưa chọn đáp án đúng."}`
+      );
+    } else {
+      const answer = q.answer.trim();
+      if (!trimmedOptions.includes(answer)) {
+        if (answer.includes(";")) {
+          errors.push(
+            `${indexStr}: Hệ thống chỉ hỗ trợ một đáp án đúng khớp chính xác với một phương án lựa chọn. Các đáp án nối nhau bằng dấu chấm phẩy (;) cần được viết lại để chọn một đáp án duy nhất.`
+          );
+        } else {
+          errors.push(
+            `${indexStr}: Đáp án đúng ("${answer}") phải khớp chính xác với một trong các phương án lựa chọn.`
+          );
+        }
+      }
+    }
+  }
+
+  // Validate explain
+  if (q.explain !== undefined && q.explain !== null && typeof q.explain !== "string") {
+    errors.push(`${indexStr}: Lời giải thích phải là chuỗi ký tự.`);
+  } else if (typeof q.explain === "string" && q.explain.trim().length > MAX_EXPLAIN_LENGTH) {
+    errors.push(
+      `${indexStr}: Lời giải thích quá dài (tối đa ${MAX_EXPLAIN_LENGTH} ký tự).`
+    );
+  }
+
+  return errors;
+}
+
+/**
  * Validates and sanitizes questions for final submission.
  * Strictly requires answer to match one of the unique options.
  * @param {Array<object>} rawQuestions
@@ -43,102 +155,25 @@ export function validateSubmitQuestions(rawQuestions) {
   const sanitized = [];
 
   for (let i = 0; i < rawQuestions.length; i++) {
-    const q = rawQuestions[i];
+    const rawQ = rawQuestions[i];
+    const q = rawQ && typeof rawQ.toObject === "function" ? rawQ.toObject() : rawQ;
     const indexStr = `Câu hỏi số ${i + 1}`;
 
-    if (!q || typeof q !== "object") {
-      throw new ValidationError(`${indexStr}: Dữ liệu câu hỏi không hợp lệ.`);
+    const errors = getQuestionValidationErrors(q, indexStr, { isPreview: false });
+    if (errors.length > 0) {
+      throw new ValidationError(errors[0]);
     }
 
-    // Validate question text
-    if (typeof q.question !== "string" || !q.question.trim()) {
-      throw new ValidationError(`${indexStr}: Nội dung câu hỏi không được để trống.`);
-    }
-    const questionText = q.question.trim();
-    if (questionText.length > MAX_QUESTION_LENGTH) {
-      throw new ValidationError(
-        `${indexStr}: Nội dung câu hỏi quá dài (tối đa ${MAX_QUESTION_LENGTH} ký tự).`
-      );
-    }
-
-    // Validate options
-    if (!Array.isArray(q.options)) {
-      throw new ValidationError(`${indexStr}: Danh sách phương án trả lời không hợp lệ.`);
-    }
-
-    if (
-      q.options.length < MIN_OPTIONS ||
-      q.options.length > MAX_OPTIONS
-    ) {
-      throw new ValidationError(
-        `${indexStr}: Số lượng phương án phải từ ${MIN_OPTIONS} đến ${MAX_OPTIONS} lựa chọn.`
-      );
-    }
-
-    const trimmedOptions = [];
-    for (let optIdx = 0; optIdx < q.options.length; optIdx++) {
-      const opt = q.options[optIdx];
-      if (typeof opt !== "string") {
-        throw new ValidationError(`${indexStr}: Phương án trả lời phải là chuỗi ký tự.`);
-      }
-      const trimmed = opt.trim();
-      if (trimmed.length === 0) {
-        throw new ValidationError(
-          `${indexStr}: Có phương án trả lời bị để trống.`
-        );
-      }
-      if (trimmed.length > MAX_OPTION_LENGTH) {
-        throw new ValidationError(
-          `${indexStr}: Phương án trả lời quá dài (tối đa ${MAX_OPTION_LENGTH} ký tự).`
-        );
-      }
-      trimmedOptions.push(trimmed);
-    }
-
-    const uniqueSet = new Set(trimmedOptions);
-    if (uniqueSet.size !== trimmedOptions.length) {
-      throw new ValidationError(
-        `${indexStr}: Các phương án lựa chọn không được trùng lặp nội dung.`
-      );
-    }
-
-    // Validate answer
-    if (typeof q.answer !== "string") {
-      throw new ValidationError(
-        `${indexStr}: Chưa chọn đáp án đúng.`
-      );
-    }
-    const answer = q.answer.trim();
-    if (!answer) {
-      throw new ValidationError(
-        `${indexStr}: Chưa chọn đáp án đúng.`
-      );
-    }
-
-    if (!trimmedOptions.includes(answer)) {
-      throw new ValidationError(
-        `${indexStr}: Đáp án đúng ("${answer}") phải khớp chính xác với một trong các phương án lựa chọn.`
-      );
-    }
-
-    if (q.explain !== undefined && q.explain !== null && typeof q.explain !== "string") {
-      throw new ValidationError(`${indexStr}: Lời giải thích phải là chuỗi ký tự.`);
-    }
-    const explain =
-      typeof q.explain === "string" ? q.explain.trim() : "";
-    if (explain.length > MAX_EXPLAIN_LENGTH) {
-      throw new ValidationError(
-        `${indexStr}: Lời giải thích quá dài (tối đa ${MAX_EXPLAIN_LENGTH} ký tự).`
-      );
-    }
+    const trimmedOptions = q.options.map((opt) => opt.trim());
+    const sanitizedQ = {
+      question: q.question.trim(),
+      options: trimmedOptions,
+      answer: q.answer.trim(),
+      explain: typeof q.explain === "string" ? q.explain.trim() : ""
+    };
 
     // Never spread raw request into model; ignore unknown fields
-    sanitized.push({
-      question: questionText,
-      options: trimmedOptions,
-      answer,
-      explain
-    });
+    sanitized.push(sanitizedQ);
   }
 
   return sanitized;

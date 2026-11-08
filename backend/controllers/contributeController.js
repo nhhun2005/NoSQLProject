@@ -11,6 +11,7 @@ import Subject from "../models/subject.js";
 import Chapter from "../models/chapter.js";
 import fs from "fs"; // Dùng đọc & xoá file CSV
 import { parseContributionCSV } from "../utils/contributionCsv.js";
+import { validateSubmitQuestions, ValidationError } from "../utils/contributionValidation.js";
 
 // ==============================================================
 // 1) Duyệt đề đóng góp → chuyển thành quiz chính thức
@@ -26,6 +27,13 @@ export const approveContribution = async (req, res) => {
     //Nếu không tìm thấy được contributed quiz thì báo lỗi
     if (!contrib) return res.status(404).json({
       message: "Không tìm thấy đóng góp"
+    });
+
+    // Revalidate saved/legacy contributions before creating any published data.
+    const validatedQuestions = validateSubmitQuestions(contrib.questions);
+    const textQuestions = validatedQuestions.filter((_q, index) => !contrib.questions[index].image);
+    if (textQuestions.length === 0) return res.status(400).json({
+      message: "Đề không có câu hỏi dạng chữ có thể xuất bản."
     });
 
     //Kiểm tra tính hợp lệ của môn học
@@ -51,7 +59,7 @@ export const approveContribution = async (req, res) => {
       name: contrib.name,
       subjectId: contrib.subjectId || null,
       chapterId: contrib.chapterId || null,
-      questionNum: contrib.questions.length,
+      questionNum: textQuestions.length,
       timeLimit: contrib.timeLimit || 0,
       availability: true,
       //Bật trạng thái khả dụng của đề
@@ -59,7 +67,7 @@ export const approveContribution = async (req, res) => {
     };
     const quiz = await Quiz.create(quizData); //Tạo quiz trong db
     // ================== LƯU CÂU HỎI DẠNG TEXT ==================
-    const questionsText = contrib.questions.filter(q => !q.image).map(q => ({
+    const questionsText = textQuestions.map(q => ({
       quizId: quiz._id,
       question: q.question,
       options: q.options,
@@ -78,6 +86,7 @@ export const approveContribution = async (req, res) => {
       quizId: quiz._id
     });
   } catch (err) {
+    if (err instanceof ValidationError) return res.status(err.status).json({ message: err.message });
     console.error("Lỗi duyệt đóng góp:", err);
     res.status(500).json({
       message: err.message
@@ -133,31 +142,17 @@ export const handleCSVUpload = async (req, res) => {
     });
   }
   try {
-    const questions = results.map((r, index) => {
-      //Xử lý từng dòng để tạo nên cấu trúc câu hỏi đúng
-      if (!r.question || !r.options || !r.answer) {
-        console.log("❌ Lỗi dòng:", index + 1, r);
-        return null;
-      }
-      const options = String(r.options).replace(/^"|"$/g, "") // bỏ dấu ngoặc kép
-      .split(";") //Các option ngăn cách bởi dấu ;
-      .map(o => o.trim()).filter(o => o);
-      return {
-        //Tạo mẫu câu hỏi chuẩn
-        question: String(r.question).replace(/^"|"$/g, ""),
-        options,
-        answer: String(r.answer).replace(/^"|"$/g, ""),
-        explain: r.explain ? String(r.explain).replace(/^"|"$/g, "") : ""
-      };
-    }).filter(q => q !== null);
-
-    // Kiểm tra câu hỏi hợp lệ trước khi thực hiện bất kỳ thao tác model nào
-    if (questions.length === 0) {
+    if (results.length === 0) {
       safeUnlink(filePath);
-      return res.status(400).json({
-        message: "File CSV không chứa câu hỏi hợp lệ!"
-      });
+      return res.status(400).json({ message: "File CSV không chứa câu hỏi hợp lệ!" });
     }
+    // Do not discard bad rows or silently remove empty options from a submission.
+    const questions = validateSubmitQuestions(results.map(r => ({
+      question: String(r.question || "").trim(),
+      options: r.options ? String(r.options).split(";").map(o => o.trim()) : [],
+      answer: String(r.answer || "").trim(),
+      explain: String(r.explain || "").trim()
+    })));
 
     // Lấy subject/chapter
     const subjectId = req.body.subjectId || null;
@@ -205,6 +200,7 @@ export const handleCSVUpload = async (req, res) => {
     });
   } catch (err) {
     safeUnlink(filePath);
+    if (err instanceof ValidationError) return res.status(err.status).json({ message: err.message });
     console.error("CSV save error:", err);
     res.status(500).json({
       message: "Lỗi khi lưu đề đóng góp!"
