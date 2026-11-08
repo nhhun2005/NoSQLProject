@@ -68,7 +68,7 @@ Quiz Company`;
     }
 
     const data = await resend.emails.send({
-      from: 'Quiz Company <noreply@quiz.id.vn>',
+      from: 'Quiz Company <noreply@nhhun2005.id.vn>',
       to: [to],
       subject: subject,
       html: htmlContent,
