@@ -114,7 +114,7 @@ export default function EditQuizPage() {
     }
   }
   if (loading) return <p role="status" className="p-8">Đang tải bộ đề...</p>;
-  if (!quiz) return <section className="p-8" role="alert"><p>{error || 'Không tìm thấy bộ đề.'}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> <Link to="/subject/edit">Về môn học</Link></section>;
+  if (!quiz) return <section className="p-8" role="alert"><p>{error || 'Không tìm thấy bộ đề.'}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> <Link to="/subject/edit">Về môn học</Link></section>;
   return <form className="p-8 bg-white" noValidate onSubmit={save} aria-busy={saving}><h1>Chỉnh sửa bộ đề</h1>{error && <p role="alert" className="p-4 bg-red-50 text-red-900 border border-red-700 rounded-lg">{error}</p>}{saving && <p role="status">Đang lưu bộ đề...</p>}<fieldset disabled={saving}><div className="flex gap-6 items-end flex-wrap mb-8"><label>Tên bộ đề<input className="block border rounded-lg p-2" value={quiz.name || ''} onChange={e => setQuiz(q => ({
             ...q,
             name: e.target.value

@@ -33,7 +33,7 @@ export default function SubjectPage() {
   }, [retry]);
   const reFetchSubjects = () => setRetry(v => v + 1);
   if (loading) return <p role="status" className="p-8">Đang tải môn học...</p>;
-  if (error) return <section role="alert" className="p-8"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
+  if (error) return <section role="alert" className="p-8"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
   return <div className="w-full min-h-screen bg-white flex flex-col overflow-y-auto">
       <div className=" mx-24 my-24">
         <div id="subjectPageTitle" className="text-[#272b41]">

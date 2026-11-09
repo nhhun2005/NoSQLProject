@@ -36,7 +36,7 @@ function AdminDashboard() {
         <NavbarAdmin username={account?.username || "Admin"} />
 
         <section className="flex-1 p-6">
-          {loading ? <p role="status">Đang tải tài khoản...</p> : error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></div> : <><UserTable users={users} setUsers={setUsers} />{!users.length && <p>Chưa có tài khoản để hiển thị.</p>}</>}
+          {loading ? <p role="status">Đang tải tài khoản...</p> : error ? <div role="alert"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></div> : <><UserTable users={users} setUsers={setUsers} />{!users.length && <p>Chưa có tài khoản để hiển thị.</p>}</>}
         </section>
       </div>
     </div>;

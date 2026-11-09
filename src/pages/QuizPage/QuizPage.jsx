@@ -4,6 +4,7 @@ import quizService from '../../services/quizService';
 import submissionService from '../../services/submissionService';
 import QuestionDrawer from '../../components/QuestionDrawer/QuestionDrawer';
 import { resolveAssetUrl } from '../../utils/apiConfig';
+import { getPracticeRetryState } from '../../utils/practiceRound';
 const defaults = {
   shuffleQuestions: true,
   showAnswers: true,
@@ -42,7 +43,10 @@ export default function QuizPage() {
   const [activeOptions, setActiveOptions] = useState(options);
   const [remaining, setRemaining] = useState(null);
   const [result, setResult] = useState(null);
+  const [practiceRound, setPracticeRound] = useState(1);
+  const [practiceNotice, setPracticeNotice] = useState('');
   const attemptRef = useRef(null);
+  const contentRef = useRef(null);
   const deadlineRef = useRef(null);
   const sendingRef = useRef(false);
   const startedRef = useRef(null);
@@ -81,6 +85,8 @@ export default function QuizPage() {
       setFlagged([]);
       setIndex(0);
       setResult(null);
+      setPracticeRound(1);
+      setPracticeNotice('');
       setActiveOptions(actualOptions);
       attemptRef.current = data.attemptId;
       const minutes = Number(data.quiz.timeLimit);
@@ -173,43 +179,51 @@ export default function QuizPage() {
     }
   }, [phase, remaining, submit]);
   function retryIncorrect() {
-    const list = questions.filter(q => answers[q._id] !== q.answer);
-    if (!list.length) {
-      navigate(back);
+    if (activeOptions.scoreMode || !activeOptions.rotationalPractice || sendingRef.current || !['running', 'submitted'].includes(phase)) return;
+    const nextRound = getPracticeRetryState(questions, answers);
+    if (!nextRound.questions.length) {
+      setPracticeNotice('Bạn đã trả lời đúng tất cả câu hỏi trong vòng này. Bạn có thể xem lại hoặc dừng ôn tập.');
       return;
     }
-    setQuestions(list);
+    contentRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    setQuestions(nextRound.questions);
     setAnswers({});
     setFlagged([]);
     setIndex(0);
     setResult(null);
     setError('');
-    deadlineRef.current = null;
-    setRemaining(null);
+    setPracticeRound(round => round + 1);
+    setPracticeNotice(`Vòng mới có ${nextRound.questions.length} câu: ${nextRound.wrong} câu sai và ${nextRound.unanswered} câu chưa trả lời. Các câu đã đúng được bỏ khỏi vòng mới.`);
+    const minutes = Number(quiz?.timeLimit);
+    const duration = activeOptions.timeLimit && Number.isFinite(minutes) && minutes > 0 ? minutes * 60 : null;
+    deadlineRef.current = duration === null ? null : Date.now() + duration * 1000;
+    setRemaining(duration);
     setPhase('running');
     autoSubmitted.current = false;
   }
   const subjectId = typeof quiz?.subjectId === 'object' ? quiz?.subjectId?._id : quiz?.subjectId;
   const back = subjectId ? `/subject/view/${subjectId}` : '/subject/view';
   if (phase === 'loading' || phase === 'starting') return <p className="p-8" role="status">{phase === 'starting' ? 'Đang chuẩn bị bài...' : 'Đang tải bộ đề...'}</p>;
-  if (phase === 'error') return <section className="p-8" role="alert"><p>{error}</p><button type="button" onClick={() => setRetryLoad(v => v + 1)}>Thử lại</button> <Link to="/subject/view">Về môn học</Link></section>;
-  if (phase === 'ready') return <section className="max-w-3xl mx-auto p-8"><Link to={back}>← Về môn học</Link><h1 className="mt-6">{quiz?.name || 'Bộ đề'}</h1>{!quiz?.questions?.length ? <p>Bộ đề chưa có câu hỏi để làm.</p> : <><p>Chọn luyện tập để xem lời giải, hoặc làm bài có tính điểm để lưu kết quả.</p><label className="block my-4"><input type="checkbox" checked={mode} onChange={e => setMode(e.target.checked)} /> Làm bài có tính điểm ({Number(quiz?.timeLimit) || 0} phút)</label><button type="button" onClick={() => {
+  if (phase === 'error') return <section className="p-8" role="alert"><p>{error}</p><button type="button" className="app-button app-button--secondary" onClick={() => setRetryLoad(v => v + 1)}>Thử lại</button> <Link className="app-button app-button--secondary" to="/subject/view">Về môn học</Link></section>;
+  if (phase === 'ready') return <section className="max-w-3xl mx-auto p-8"><Link className="app-button app-button--secondary" to={back}>← Về môn học</Link><h1 className="mt-6">{quiz?.name || 'Bộ đề'}</h1>{!quiz?.questions?.length ? <p>Bộ đề chưa có câu hỏi để làm.</p> : <><p>Chọn luyện tập để xem lời giải, hoặc làm bài có tính điểm để lưu kết quả.</p><label className="block my-4"><input type="checkbox" checked={mode} onChange={e => setMode(e.target.checked)} /> Làm bài có tính điểm ({Number(quiz?.timeLimit) || 0} phút)</label><button type="button" onClick={() => {
         autoSubmitted.current = false;
         initialize(mode);
-      }} className="bg-green-800 text-white rounded-lg px-6 py-3">Bắt đầu làm bài</button></>}{error && <p role="alert" className="text-red-800 mt-4">{error}</p>}</section>;
+      }} className="app-button">Bắt đầu làm bài</button></>}{error && <p role="alert" className="text-red-800 mt-4">{error}</p>}</section>;
   const question = questions[index];
-  if (!question) return <section className="p-8"><p>Không có câu hỏi để hiển thị.</p><Link to={back}>Về môn học</Link></section>;
+  if (!question) return <section className="p-8"><p>Không có câu hỏi để hiển thị.</p><Link className="app-button app-button--secondary" to={back}>Về môn học</Link></section>;
   const locked = phase !== 'running';
-  return <div className="h-full bg-gray-50 overflow-y-auto">
-    <section className="w-full max-w-3xl mx-auto p-4 pt-8 pb-[40vh]">
-      <Link to={back}>← Về môn học</Link><h1 className="text-2xl my-4">{quiz.name}</h1>
+  return <div ref={contentRef} className="h-full bg-gray-50 overflow-y-auto">
+    <section className="w-full max-w-3xl mx-auto p-4 pt-8 pb-[max(45vh,300px)]">
+      <Link className="app-button app-button--secondary" to={back}>← Về môn học</Link><h1 className="text-2xl my-4">{quiz.name}</h1>
+      {!activeOptions.scoreMode && activeOptions.rotationalPractice && <p className="text-green-900 font-semibold mb-3">Ôn tập xoay vòng · Vòng {practiceRound}</p>}
+      {practiceNotice && <p role="status" className="p-4 rounded-xl border border-green-300 bg-green-50 text-green-950 mb-4">{practiceNotice}</p>}
       {error && <div role="alert" className="p-4 border border-red-600 bg-red-50 text-red-900 mb-4">{error}</div>}
       {phase === 'submitting' && <p role="status">Đang nộp bài...</p>}
-      {phase === 'submitted' && <div role="status" className="p-4 bg-green-100 text-green-950 mb-6"><p>{activeOptions.scoreMode ? 'Đã lưu bài. Điểm do hệ thống chấm' : 'Kết quả luyện tập (không lưu điểm)'}: <strong>{result.score}%</strong></p>{activeOptions.scoreMode && <Link to={`/quizzes/review/${quizId}`} state={{
+      {phase === 'submitted' && <div role="status" className="p-4 bg-green-100 text-green-950 mb-6"><p>{activeOptions.scoreMode ? 'Đã lưu bài. Điểm do hệ thống chấm' : 'Kết quả luyện tập (không lưu điểm)'}: <strong>{result.score}%</strong></p>{activeOptions.scoreMode && <Link className="app-button app-button--secondary" to={`/quizzes/review/${quizId}`} state={{
           subjectId,
           mode: 'latest'
         }}>Xem lại bài và lời giải →</Link>}</div>}
-      <div className="flex justify-between items-center gap-3 mb-5"><button type="button" disabled={index === 0} onClick={() => setIndex(v => v - 1)}>← Câu trước</button><span>Câu {index + 1}/{questions.length}</span><button type="button" disabled={index === questions.length - 1} onClick={() => setIndex(v => v + 1)}>Câu sau →</button><button type="button" aria-label={flagged.includes(question._id) ? 'Bỏ đánh dấu câu hỏi' : 'Đánh dấu câu hỏi'} aria-pressed={flagged.includes(question._id)} onClick={() => setFlagged(v => v.includes(question._id) ? v.filter(id => id !== question._id) : [...v, question._id])}>🚩</button></div>
+      <div className="flex justify-between items-center gap-3 mb-5"><button type="button" className="app-button app-button--secondary" disabled={index === 0} onClick={() => setIndex(v => v - 1)}>← Câu trước</button><span>Câu {index + 1}/{questions.length}</span><button type="button" className="app-button app-button--secondary" disabled={index === questions.length - 1} onClick={() => setIndex(v => v + 1)}>Câu sau →</button><button type="button" className="app-button app-button--icon app-button--secondary" aria-label={flagged.includes(question._id) ? 'Bỏ đánh dấu câu hỏi' : 'Đánh dấu câu hỏi'} aria-pressed={flagged.includes(question._id)} onClick={() => setFlagged(v => v.includes(question._id) ? v.filter(id => id !== question._id) : [...v, question._id])}>🚩</button></div>
       <fieldset disabled={locked}><legend className="text-2xl font-bold mb-4">{index + 1}. {question.question}</legend>
       {question.image && <img src={resolveAssetUrl(question.image)} alt={`Hình minh họa câu ${index + 1}`} className="max-w-full max-h-[400px] mx-auto mb-6 object-contain" onError={e => {
           e.currentTarget.alt = 'Không tải được hình minh họa. Vui lòng kiểm tra đường dẫn ảnh.';
@@ -226,6 +240,6 @@ export default function QuizPage() {
           })}</div></fieldset>
       {!activeOptions.scoreMode && (phase === 'submitted' || activeOptions.showAnswers && answers[question._id]) && <div className="mt-6 p-4 rounded-xl bg-green-50"><p><strong>Đáp án đúng:</strong> {question.answer}</p><p>{question.explain || 'Câu hỏi chưa có phần giải thích.'}</p></div>}
     </section>
-    <QuestionDrawer totalQuestions={questions.length} answered={questions.flatMap((q, i) => answers[q._id] ? [i + 1] : [])} flagged={questions.flatMap((q, i) => flagged.includes(q._id) ? [i + 1] : [])} currentQuestion={index + 1} onSelectQuestion={num => setIndex(num - 1)} remainingTime={remaining === null ? 'Không giới hạn' : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`} rotationalPractice={false} onSubmit={submit} submitDisabled={locked} onRetry={retryIncorrect} showRetryButton={!activeOptions.scoreMode && phase === 'submitted' && activeOptions.rotationalPractice} />
+    <QuestionDrawer totalQuestions={questions.length} answered={questions.flatMap((q, i) => answers[q._id] ? [i + 1] : [])} flagged={questions.flatMap((q, i) => flagged.includes(q._id) ? [i + 1] : [])} currentQuestion={index + 1} onSelectQuestion={num => setIndex(num - 1)} remainingTime={remaining === null ? 'Không giới hạn' : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`} rotationalPractice={!activeOptions.scoreMode && activeOptions.rotationalPractice} onSubmit={submit} submitDisabled={locked} onStop={() => navigate(back)} onRetry={retryIncorrect} showRetryButton={!activeOptions.scoreMode && activeOptions.rotationalPractice} retryDisabled={!['running', 'submitted'].includes(phase)} />
   </div>;
 }

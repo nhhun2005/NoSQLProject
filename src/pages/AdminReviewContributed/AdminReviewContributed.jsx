@@ -62,7 +62,7 @@ const AdminReviewContributed = () => {
       current = false;
     };
   }, [id, retry]);
-  if (error) return <section className="p-8" role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
+  if (error) return <section className="p-8" role="alert"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
 
   // Hiển thị khi đang tải
   if (loading) return <div className="text-center py-8 text-xl text-gray-600">

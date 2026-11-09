@@ -37,7 +37,7 @@ export default function UserStats({
     overall
   } = useMemo(() => summarizeProgress(chapters, submissions), [chapters, submissions]);
   if (loading) return <p role="status">Đang tải thống kê...</p>;
-  if (error) return <div role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại thống kê</button></div>;
+  if (error) return <div role="alert"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại thống kê</button></div>;
   if (!chapters?.length) return <p>Môn học chưa có chương được công khai.</p>;
   if (!completed) return <p>Chưa có dữ liệu bài làm có tính điểm. Kết quả luyện tập không được lưu vào thống kê.</p>;
   const lower = data.filter(item => item.avg !== null && item.avg < 60).map(item => item.name);

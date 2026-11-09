@@ -35,7 +35,7 @@ export default function ReviewQuizPage() {
     };
   }, [quizId, userId, retry]);
   if (loading) return <p role="status" className="p-8">Đang tải bài làm...</p>;
-  if (error) return <section role="alert" className="p-8"><h1>Chưa thể xem lại bộ đề</h1><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> <Link to={`/quizzes/${quizId}`}>Mở bộ đề để luyện tập / làm bài</Link> <Link to="/subject/view">Về môn học</Link></section>;
+  if (error) return <section role="alert" className="p-8"><h1>Chưa thể xem lại bộ đề</h1><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> <Link to={`/quizzes/${quizId}`}>Mở bộ đề để luyện tập / làm bài</Link> <Link to="/subject/view">Về môn học</Link></section>;
   if (!data?.quiz) return <p className="p-8">Không tìm thấy bộ đề. <Link to="/subject/view">Về môn học</Link></p>;
   const {
     quiz,

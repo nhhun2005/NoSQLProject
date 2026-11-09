@@ -118,7 +118,7 @@ export default function QuizListPage() {
 
   // --- RENDER ---
   if (loading) return <p role="status" className="p-6 text-lg">Đang tải dữ liệu...</p>;
-  if (error) return <section role="alert" className="p-6"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
+  if (error) return <section role="alert" className="p-6"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></section>;
   if (!subject) return <p className="p-6">Không tìm thấy môn học.</p>;
   return <div className="w-full pb-24 bg-white">
       {type === "edit" && <p className="px-14 text-4xl font-bold pt-4 text-gray-600">
@@ -190,7 +190,7 @@ function ChapterBox({
   return <div className="relative p mt-8 mx-auto w-[90%] pb-16 transition-all duration-500 shadow-black shadow-sm rounded-[8px]">
       <div className="flex flex-row justify-between">
         <p className="text-4xl pt-4 px-8 text-[#3D763A]">{chapter.name}</p>
-        <button type="button" aria-label={`${expandChapterBox ? "Thu gọn" : "Mở"} chương ${chapter.name}`} aria-expanded={expandChapterBox} onClick={() => setExpandChapterBox(v => !v)}><ExpandButton aria-hidden="true" className={`text-4xl hover:scale-110 transition-all duration-500 ${expandChapterBox ? "rotate-180" : ""}`} /></button>
+        <button type="button" className="app-button app-button--icon" aria-label={`${expandChapterBox ? "Thu gọn" : "Mở"} chương ${chapter.name}`} aria-expanded={expandChapterBox} onClick={() => setExpandChapterBox(v => !v)}><ExpandButton aria-hidden="true" className={`text-4xl hover:scale-110 transition-all duration-500 ${expandChapterBox ? "rotate-180" : ""}`} /></button>
       </div>
       <div hidden={!expandChapterBox} className={`${expandChapterBox ? "h-[312px]" : "h-0"} transition-all duration-500 overflow-hidden`}>
         <div className="w-full h-full pb-8 overflow-scroll">
@@ -274,7 +274,7 @@ function QuizBox({
         width: `${Math.max(0, Math.min(100, bestScore ?? 0))}%`
       }}>
             <p className="absolute w-full text-center text-gray-700 text-2xl">
-              {scoreState === "loading" ? "Đang tải điểm..." : scoreState === "error" ? <button type="button" onClick={() => setScoreRetry(v => v + 1)}>Thử tải lại điểm</button> : bestScore === null ? "Chưa làm bài" : `Cao nhất: ${bestScore}/100`}
+              {scoreState === "loading" ? "Đang tải điểm..." : scoreState === "error" ? <button type="button" className="app-button app-button--compact" onClick={() => setScoreRetry(v => v + 1)}>Thử tải lại điểm</button> : bestScore === null ? "Chưa làm bài" : `Cao nhất: ${bestScore}/100`}
             </p>
           </div>
         </div>}

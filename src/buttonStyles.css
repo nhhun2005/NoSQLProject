@@ -1,0 +1,115 @@
+.app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0.5rem 1rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background-color: #31872d;
+  color: #ffffff;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.app-button:hover:not(:disabled) {
+  background-color: #276d24;
+}
+
+.app-button:active:not(:disabled) {
+  background-color: #1e551c;
+}
+
+.app-button:focus-visible {
+  outline: 2px solid #31872d;
+  outline-offset: 2px;
+}
+
+.app-button:disabled,
+.app-button[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Primary variant */
+.app-button--primary {
+  background-color: #31872d;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.app-button--primary:hover:not(:disabled) {
+  background-color: #276d24;
+}
+
+.app-button--primary:active:not(:disabled) {
+  background-color: #1e551c;
+}
+
+/* Outline Secondary variant */
+.app-button--secondary {
+  background-color: transparent;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.app-button--secondary:hover:not(:disabled) {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+  color: #1f2937;
+}
+
+.app-button--secondary:active:not(:disabled) {
+  background-color: #e5e7eb;
+}
+
+.app-button--secondary:focus-visible {
+  outline: 2px solid #6b7280;
+  outline-offset: 2px;
+}
+
+/* Compact variant */
+.app-button--compact {
+  min-height: 26px;
+  height: 26px;
+  min-width: auto;
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: 0.375rem;
+}
+
+/* Icon variant */
+.app-button--icon {
+  background-color: transparent;
+  border-color: transparent;
+  color: inherit;
+  padding: 0.25rem;
+  min-height: 40px;
+  min-width: 40px;
+  border-radius: 9999px;
+}
+
+.app-button--icon:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.app-button--icon:active:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.app-button--icon:focus-visible {
+  outline: 2px solid #31872d;
+  outline-offset: 2px;
+}

@@ -53,7 +53,7 @@ export default function ContributedQuizList() {
       current = false;
     };
   }, [currentPage, account.id, retry]);
-  if (error) return <div role="alert" className="p-8"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></div>;
+  if (error) return <div role="alert" className="p-8"><p>{error}</p><button type="button" className="app-button" onClick={() => setRetry(v => v + 1)}>Thử lại</button></div>;
 
   // Giao diện khi load trang lần đầu
   if (initialLoading) return <div className="text-center mt-10 text-lg text-green-700">
